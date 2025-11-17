@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # Vespera Server
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: vespera-server
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=sqlite:///data/vespera.db
+      - VESPERA_SECRET=change-this-secret-key
+    restart: unless-stopped
+    networks:
+      - vespera-network
+
+  # Vespera Agent (示例)
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    container_name: vespera-agent-example
+    environment:
+      - RUST_LOG=info
+      - VESPERA_NODE_ID=docker-agent-01
+      - VESPERA_SERVER_URL=http://server:3000
+      - VESPERA_SECRET=change-this-secret-key
+      - VESPERA_REPORT_INTERVAL=5
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - vespera-network
+
+networks:
+  vespera-network:
+    driver: bridge
+
+volumes:
+  data:

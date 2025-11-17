@@ -5,7 +5,7 @@ use axum::{
     response::Response,
 };
 
-use crate::server::AppError;
+use vespera_common::ServerError as AppError;
 
 /// Agent 注册令牌验证中间件
 ///

@@ -1,5 +1,5 @@
 use std::time::Instant;
-use super::db::DbRepo;
+use crate::db::DbRepo;
 
 /// 应用共享状态
 ///

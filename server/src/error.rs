@@ -5,8 +5,8 @@ use axum::{
 };
 use thiserror::Error;
 
-use crate::common;
-use crate::server::db::error::DbError;
+use vespera_common;
+use crate::db::error::DbError;
 
 /// 应用层错误类型
 #[derive(Error, Debug)]
@@ -54,7 +54,7 @@ impl IntoResponse for AppError {
         };
 
         // 构造统一的 JSON 响应格式
-        let body = Json(common::Response::<()> {
+        let body = Json(vespera_common::Response::<()> {
             code,
             data: None,
             msg: Some(message),

@@ -5,10 +5,10 @@ use tower_http::{
     trace::TraceLayer,
 };
 
-use crate::server::db::DbRepo;
-use crate::server::middleware::verify_agent_token;
-use crate::server::routes;
-use crate::server::state::AppState;
+use crate::db::DbRepo;
+use crate::middleware::verify_agent_token;
+use crate::routes;
+use crate::state::AppState;
 
 /// 创建 Axum 应用
 ///

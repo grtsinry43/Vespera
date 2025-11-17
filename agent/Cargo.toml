@@ -1,0 +1,43 @@
+[package]
+name = "vespera-agent"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "vespera_agent"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vespera-agent"
+path = "src/bin/agent.rs"
+
+[dependencies]
+vespera-common = { path = "../common" }
+
+# System Information
+sysinfo = "0.32"
+
+# Async Runtime
+tokio = { workspace = true }
+
+# HTTP Client
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error Handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Configuration
+toml = "0.8"
+hostname = "0.4"

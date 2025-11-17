@@ -1,0 +1,21 @@
+# Vespera Agent Configuration
+
+[agent]
+# 节点唯一标识符（建议使用主机名或 UUID）
+node_id = "my-server-01"
+
+# Server 地址
+server_url = "http://localhost:3000"
+
+# 上报间隔（秒）
+report_interval = 5
+
+# 请求超时（秒）
+timeout = 10
+
+# 重试次数
+retry_attempts = 3
+
+[auth]
+# 认证密钥（与 Server 端配置一致）
+secret = "your-secret-key-change-me"

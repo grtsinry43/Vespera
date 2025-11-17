@@ -1,13 +1,20 @@
-mod common;
-mod config;
-mod server;
+mod app;
+mod db;
+mod error;
+mod handlers;
+mod middleware;
+mod routes;
+mod state;
+
+#[cfg(test)]
+mod test_utils;
 
 use anyhow::Result;
+use app::create_app;
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use config::Settings;
-use server::{create_app, db};
+use crate::db::init_db;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -22,13 +29,12 @@ async fn main() -> Result<()> {
 
     tracing::info!("🚀 Vespera LightMonitor Server v{}", env!("CARGO_PKG_VERSION"));
 
-    // 初始化数据库（PostgreSQL 优先，自动降级 SQLite）
+    // 初始化数据库
     tracing::info!("📦 Initializing database...");
-    let db_repo = db::init_db().await?;
+    let db_repo = init_db().await?;
 
-    // 加载配置
-    let settings = Settings::new();
-    let bind_addr = settings.bind_address();
+    // 获取绑定地址（从环境变量或默认值）
+    let bind_addr = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
 
     tracing::info!("📡 Starting server on {}", bind_addr);
 

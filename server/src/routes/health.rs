@@ -2,8 +2,8 @@ use axum::{extract::State, response::Json};
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::common::Response;
-use crate::server::AppState;
+use vespera_common::Response;
+use crate::state::AppState;
 
 /// 健康检查响应数据
 #[derive(Serialize)]
@@ -34,14 +34,12 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> Json<Response<H
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::db;
+    use crate::test_utils::create_test_db;
 
     #[tokio::test]
     async fn test_health_check() {
-        // 创建测试数据库
-        let db_repo = db::init_db()
-            .await
-            .expect("Failed to initialize test database");
+        // 使用内存数据库，避免并发测试时的文件锁冲突
+        let db_repo = create_test_db().await;
 
         let state = Arc::new(AppState::new(db_repo));
 

@@ -1,36 +1,37 @@
-[package]
-name = "Vespera"
+[workspace]
+members = ["agent", "server", "common"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
+authors = ["Vespera Team"]
 
-[dependencies]
-# Web Framework
-axum = { version = "0.8", default-features = false, features = ["json", "tokio", "http1", "http2"] }
-tokio = { version = "1", features = ["full"] }
-tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["trace", "cors"] }
+[workspace.dependencies]
+# Async Runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "sync"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
 # Error Handling
 thiserror = "2"
 anyhow = "1"
 
-# Time
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Database (SQLite only - 轻量级方案)
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "migrate", "macros"] }
+# Time
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
+# UUID
 uuid = { version = "1.6", features = ["v4", "serde"] }
 
 [profile.release]
-opt-level = 3
-lto = "thin"
-codegen-units = 1
-strip = true
+opt-level = "z"         # 优化二进制大小
+lto = true              # Link Time Optimization
+codegen-units = 1       # 单编译单元，更好的优化
+strip = true            # 移除符号表
+panic = "abort"         # 减少 unwinding 代码大小

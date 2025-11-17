@@ -1,0 +1,17 @@
+[package]
+name = "vespera-common"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+# axum 用于 error.rs 的 IntoResponse trait
+axum = { version = "0.8", default-features = false, features = ["json"] }
+
+# anyhow 用于错误转换
+anyhow = { workspace = true }

@@ -1,10 +1,11 @@
 use axum::{extract::State, Json};
 use std::sync::Arc;
 
-use crate::common::{ReportRequest, Response};
-use crate::server::{
+use vespera_common::{ReportRequest, Response};
+use crate::{
     db::models::{DiskInfo, Metric, NodeCreate},
-    AppError, AppState,
+    error::AppError,
+    state::AppState,
 };
 
 /// Agent 数据上报端点
@@ -144,16 +145,14 @@ pub async fn report_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::request::{MetricsData, DiskInfo as RequestDiskInfo};
-    use crate::server::db;
+    use vespera_common::request::{MetricsData, DiskInfo as RequestDiskInfo};
+    use crate::test_utils::create_test_db;
     use uuid::Uuid;
 
     #[tokio::test]
     async fn test_first_report_creates_node() {
-        // 创建测试数据库
-        let db = db::init_db()
-            .await
-            .expect("Failed to initialize test database");
+        // 使用内存数据库，避免并发测试时的文件锁冲突
+        let db = create_test_db().await;
         let state = Arc::new(AppState::new(db));
 
         // 构造首次上报请求
