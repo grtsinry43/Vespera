@@ -1,13 +1,14 @@
-use axum::{routing::get, Router};
+use axum::{middleware, routing::{get, post}, Router};
 use std::sync::Arc;
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
 
+use crate::server::db::DbRepo;
+use crate::server::middleware::verify_agent_token;
 use crate::server::routes;
 use crate::server::state::AppState;
-use crate::server::db::DbRepo;
 
 /// 创建 Axum 应用
 ///
@@ -22,9 +23,15 @@ pub fn create_app(db: DbRepo) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    // Agent 上报端点 (需要鉴权)
+    let report_route = Router::new()
+        .route("/report", post(routes::api::v1::report::report_handler))
+        .layer(middleware::from_fn(verify_agent_token))
+        .with_state(state.clone());
+
     // API v1 路由
     let api_v1_routes = Router::new()
-        .merge(routes::api::v1::nodes::routes())
+        .merge(report_route)
         .with_state(state.clone());
 
     // API 路由

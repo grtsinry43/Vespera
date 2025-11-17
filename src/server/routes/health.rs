@@ -34,13 +34,16 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> Json<Response<H
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Instant;
+    use crate::server::db;
 
     #[tokio::test]
     async fn test_health_check() {
-        let state = Arc::new(AppState {
-            start_time: Instant::now(),
-        });
+        // 创建测试数据库
+        let db_repo = db::init_db()
+            .await
+            .expect("Failed to initialize test database");
+
+        let state = Arc::new(AppState::new(db_repo));
 
         let response = health_check(State(state)).await;
         let resp = response.0;
