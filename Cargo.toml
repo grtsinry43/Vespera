@@ -30,8 +30,14 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 uuid = { version = "1.6", features = ["v4", "serde"] }
 
 [profile.release]
-opt-level = "z"         # 优化二进制大小
-lto = true              # Link Time Optimization
-codegen-units = 1       # 单编译单元，更好的优化
-strip = true            # 移除符号表
-panic = "abort"         # 减少 unwinding 代码大小
+opt-level = "z"           # 优化二进制大小
+lto = "fat"               # Full Link Time Optimization
+codegen-units = 1         # 单编译单元,更好的优化
+strip = true              # 移除符号表
+panic = "abort"           # 减少 unwinding 代码大小
+overflow-checks = false   # 关闭溢出检查
+incremental = false       # 关闭增量编译
+
+[profile.release.package."*"]
+opt-level = "z"           # 对所有依赖也进行大小优化
+strip = true

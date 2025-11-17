@@ -20,12 +20,11 @@ pub async fn init_db() -> DbResult<DbRepo> {
     let sqlite_path = std::env::var("SQLITE_PATH").unwrap_or_else(|_| "monitor.db".to_string());
     let sqlite_url = format!("sqlite:{}?mode=rwc", sqlite_path);
 
-    tracing::info!("📦 Initializing SQLite database...");
+    tracing::info!("Initializing SQLite database...");
 
     let repo = SqliteRepo::new(&sqlite_url).await?;
 
-    tracing::info!("✓ Database connected: SQLite ({})", sqlite_path);
-    tracing::info!("💡 Tip: Set SQLITE_PATH env var to customize database location");
+    tracing::info!("db connected: SQLite ({})", sqlite_path);
 
     Ok(Arc::new(repo))
 }

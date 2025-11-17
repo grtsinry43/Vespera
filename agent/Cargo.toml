@@ -17,8 +17,8 @@ vespera-common = { path = "../common" }
 # System Information
 sysinfo = "0.32"
 
-# Async Runtime
-tokio = { workspace = true }
+# Async Runtime (精简 features for agent)
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
 
 # HTTP Client
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -31,9 +31,9 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 
-# Logging
+# Logging (精简 features)
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi", "env-filter"] }
 
 # Time
 chrono = { workspace = true }

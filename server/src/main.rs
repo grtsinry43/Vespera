@@ -30,7 +30,6 @@ async fn main() -> Result<()> {
     tracing::info!("🚀 Vespera LightMonitor Server v{}", env!("CARGO_PKG_VERSION"));
 
     // 初始化数据库
-    tracing::info!("📦 Initializing database...");
     let db_repo = init_db().await?;
 
     // 获取绑定地址（从环境变量或默认值）
