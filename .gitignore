@@ -1,2 +1,6 @@
 /target
 CLAUDE.md
+.sqlx/
+monitor.db
+monitor.db-shm
+monitor.db-wal

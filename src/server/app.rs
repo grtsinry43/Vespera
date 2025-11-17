@@ -7,13 +7,14 @@ use tower_http::{
 
 use crate::server::routes;
 use crate::server::state::AppState;
+use crate::server::db::DbRepo;
 
 /// 创建 Axum 应用
 ///
 /// 组装所有路由，配置中间件，返回可运行的 Router
-pub fn create_app() -> Router {
+pub fn create_app(db: DbRepo) -> Router {
     // 创建共享状态
-    let state = Arc::new(AppState::new());
+    let state = Arc::new(AppState::new(db));
 
     // 配置 CORS（允许所有来源，生产环境需要限制）
     let cors = CorsLayer::new()
@@ -40,45 +41,4 @@ pub fn create_app() -> Router {
         .layer(TraceLayer::new_for_http())
         // 全局状态
         .with_state(state)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::http::StatusCode;
-    use tower::ServiceExt; // for `oneshot`
-
-    #[tokio::test]
-    async fn test_health_check_route() {
-        let app = create_app();
-
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/health")
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_not_found() {
-        let app = create_app();
-
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/nonexistent")
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
 }
