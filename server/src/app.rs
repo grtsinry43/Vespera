@@ -69,7 +69,8 @@ pub fn create_app(db: DbRepo) -> Router {
     let api_v1_routes = Router::new()
         .merge(report_route)
         .merge(auth_routes)
-        .merge(user_routes);
+        .merge(user_routes)
+        .route("/ws", get(crate::ws::ws_handler)); // WebSocket 端点
 
     // API 路由
     let api_routes = Router::new().nest("/v1", api_v1_routes);

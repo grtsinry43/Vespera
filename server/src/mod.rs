@@ -5,6 +5,8 @@ pub mod handlers;
 pub mod middleware;
 pub mod routes;
 pub mod state;
+pub mod utils;
+pub mod ws;
 
 pub use app::create_app;
 pub use error::AppError;

@@ -1,5 +1,6 @@
 use std::time::Instant;
 use crate::db::DbRepo;
+use crate::ws::Broadcaster;
 
 /// 应用共享状态
 ///
@@ -12,6 +13,9 @@ pub struct AppState {
 
     /// 数据库连接池（Arc<dyn DbApi>）
     pub db: DbRepo,
+
+    /// WebSocket 广播器
+    pub broadcaster: Broadcaster,
 }
 
 impl AppState {
@@ -20,6 +24,7 @@ impl AppState {
         Self {
             start_time: Instant::now(),
             db,
+            broadcaster: Broadcaster::new(),
         }
     }
 

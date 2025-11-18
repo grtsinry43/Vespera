@@ -7,6 +7,7 @@ mod openapi;
 mod routes;
 mod state;
 mod utils;
+mod ws;
 
 #[cfg(test)]
 mod test_utils;

@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use std::sync::Arc;
 
-use vespera_common::{ReportRequest, Response};
+use vespera_common::{ReportRequest, Response, ServerMessage, MetricsUpdate, DiskInfoWs};
 use crate::{
     db::models::{DiskInfo, Metric, NodeCreate},
     error::AppError,
@@ -16,6 +16,7 @@ use crate::{
 /// - 接收 Agent 上报的节点信息和监控指标
 /// - 首次上报时自动注册节点
 /// - 已存在节点更新 last_seen 和插入指标
+/// - 实时广播指标更新到所有 WebSocket 连接
 ///
 /// # 安全
 /// - 需要通过 verify_agent_token 中间件验证
@@ -42,7 +43,7 @@ pub async fn report_handler(
     // 1. 检查节点是否存在
     let node = state.db.get_node_by_uuid(&uuid_str).await?;
 
-    let node_id = match node {
+    let (node_id, node_name, is_new_node) = match node {
         Some(existing_node) => {
             // 节点已存在：更新 last_seen
             tracing::debug!(
@@ -60,7 +61,7 @@ pub async fn report_handler(
                 )
                 .await?;
 
-            existing_node.id
+            (existing_node.id, existing_node.name, false)
         }
         None => {
             // 首次上报：创建新节点
@@ -84,7 +85,7 @@ pub async fn report_handler(
             };
 
             let created_node = state.db.create_node(&node_create).await?;
-            created_node.id
+            (created_node.id, created_node.name, true)
         }
     };
 
@@ -117,6 +118,63 @@ pub async fn report_handler(
     };
 
     state.db.insert_metrics(&metric).await?;
+
+    // 3. 广播到 WebSocket 连接
+    let ws_update = MetricsUpdate {
+        node_id,
+        node_uuid: uuid_str.clone(),
+        node_name: node_name.clone(),
+        timestamp: req.metrics.timestamp,
+        cpu_usage: req.metrics.cpu_usage as f32,
+        memory_usage: req.metrics.memory_usage as f32,
+        memory_used: req.metrics.memory_used,
+        memory_total: req.total_memory,
+        disk_info: req
+            .metrics
+            .disk_info
+            .iter()
+            .map(|d| DiskInfoWs {
+                mount: d.mount.clone(),
+                used: d.used,
+                total: d.total,
+                usage: d.usage as f32,
+            })
+            .collect(),
+        network_in: req.metrics.net_in_bytes,
+        network_out: req.metrics.net_out_bytes,
+        load_1: req.metrics.load_1.map(|v| v as f32),
+        load_5: req.metrics.load_5.map(|v| v as f32),
+        load_15: req.metrics.load_15.map(|v| v as f32),
+    };
+
+    // 广播指标更新
+    let broadcast_result = state.broadcaster.broadcast(ServerMessage::MetricsUpdate(ws_update));
+
+    // 记录广播结果 (不影响响应)
+    match broadcast_result {
+        Ok(n) => {
+            tracing::debug!(
+                node_id = node_id,
+                receiver_count = n,
+                "Metrics update broadcasted to {} WebSocket clients",
+                n
+            );
+        }
+        Err(_) => {
+            tracing::debug!(
+                node_id = node_id,
+                "No WebSocket clients connected, metrics not broadcasted"
+            );
+        }
+    }
+
+    // 如果是新节点,广播上线事件
+    if is_new_node {
+        let _ = state.broadcaster.broadcast(ServerMessage::NodeOnline {
+            node_id,
+            node_name,
+        });
+    }
 
     let elapsed = start.elapsed();
     tracing::debug!(
