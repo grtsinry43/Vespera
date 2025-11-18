@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use utoipa::ToSchema;
 
 /// Agent 数据上报请求
 ///
 /// Agent 每次上报时携带节点基本信息和当前指标数据
 /// Server 根据 node_uuid 判断是首次注册还是后续上报
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ReportRequest {
     // === 节点基本信息 (首次注册时使用) ===
     /// 节点唯一标识符 (UUID v4)
@@ -43,7 +44,7 @@ pub struct ReportRequest {
 }
 
 /// 监控指标数据
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct MetricsData {
     /// Unix 时间戳 (秒)
     pub timestamp: i64,
@@ -82,7 +83,7 @@ pub struct MetricsData {
 }
 
 /// 磁盘信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct DiskInfo {
     /// 挂载点
     pub mount: String,

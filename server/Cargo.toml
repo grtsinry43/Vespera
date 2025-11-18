@@ -45,3 +45,11 @@ base64 = "0.22"                      # Base64 编码
 # HTTP utilities
 axum-extra = { version = "0.9", features = ["typed-header"] }
 async-trait = "0.1.89"  # 用于提取 Authorization header
+
+# OpenAPI Documentation
+utoipa = { version = "5.4", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-scalar = { version = "0.3", features = ["axum"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+
+# Environment Variables
+dotenvy = "0.15"

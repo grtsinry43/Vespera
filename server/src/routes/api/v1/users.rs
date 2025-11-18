@@ -20,6 +20,19 @@ use crate::state::AppState;
 /// 列出所有用户
 ///
 /// GET /api/v1/users
+#[utoipa::path(
+    get,
+    path = "/api/v1/users",
+    responses(
+        (status = 200, description = "获取成功", body = inline(vespera_common::Response<Vec<vespera_common::User>>)),
+        (status = 401, description = "未认证"),
+        (status = 403, description = "权限不足")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "用户管理"
+)]
 pub async fn list_users(
     _admin: AdminUser, // 需要管理员权限
     State(state): State<Arc<AppState>>,
@@ -39,6 +52,21 @@ pub async fn list_users(
 /// 获取用户详情
 ///
 /// GET /api/v1/users/:id
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{id}",
+    params(
+        ("id" = i64, Path, description = "用户 ID")
+    ),
+    responses(
+        (status = 200, description = "获取成功", body = inline(vespera_common::Response<vespera_common::User>)),
+        (status = 404, description = "用户不存在")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "用户管理"
+)]
 pub async fn get_user(
     _admin: AdminUser,
     State(state): State<Arc<AppState>>,
@@ -56,6 +84,19 @@ pub async fn get_user(
 /// 创建用户
 ///
 /// POST /api/v1/users
+#[utoipa::path(
+    post,
+    path = "/api/v1/users",
+    request_body = CreateUserRequest,
+    responses(
+        (status = 200, description = "创建成功", body = inline(vespera_common::Response<vespera_common::User>)),
+        (status = 400, description = "用户名或邮箱已存在")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "用户管理"
+)]
 pub async fn create_user(
     _admin: AdminUser,
     State(state): State<Arc<AppState>>,
@@ -92,6 +133,22 @@ pub async fn create_user(
 /// 更新用户
 ///
 /// PUT /api/v1/users/:id
+#[utoipa::path(
+    put,
+    path = "/api/v1/users/{id}",
+    params(
+        ("id" = i64, Path, description = "用户 ID")
+    ),
+    request_body = UpdateUserRequest,
+    responses(
+        (status = 200, description = "更新成功", body = inline(vespera_common::Response<vespera_common::User>)),
+        (status = 404, description = "用户不存在")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "用户管理"
+)]
 pub async fn update_user(
     _admin: AdminUser,
     State(state): State<Arc<AppState>>,
@@ -120,6 +177,21 @@ pub async fn update_user(
 /// 删除用户
 ///
 /// DELETE /api/v1/users/:id
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/{id}",
+    params(
+        ("id" = i64, Path, description = "用户 ID")
+    ),
+    responses(
+        (status = 200, description = "删除成功"),
+        (status = 400, description = "不能删除自己的账号")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "用户管理"
+)]
 pub async fn delete_user(
     admin: AdminUser,
     State(state): State<Arc<AppState>>,
@@ -144,6 +216,22 @@ pub async fn delete_user(
 /// 重置用户密码 (管理员)
 ///
 /// POST /api/v1/users/:id/reset-password
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/{id}/reset-password",
+    params(
+        ("id" = i64, Path, description = "用户 ID")
+    ),
+    request_body = ResetPasswordRequest,
+    responses(
+        (status = 200, description = "重置成功"),
+        (status = 404, description = "用户不存在")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "用户管理"
+)]
 pub async fn reset_password(
     _admin: AdminUser,
     State(state): State<Arc<AppState>>,

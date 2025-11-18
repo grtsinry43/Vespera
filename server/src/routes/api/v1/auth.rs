@@ -35,6 +35,16 @@ fn generate_refresh_token() -> String {
 /// - 首次注册时可以创建管理员
 /// - 后续注册只能创建普通用户
 /// - 管理员可以通过用户管理 API 创建其他用户
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    request_body = RegisterRequest,
+    responses(
+        (status = 200, description = "注册成功", body = inline(vespera_common::Response<vespera_common::LoginResponse>)),
+        (status = 400, description = "用户名或邮箱已存在")
+    ),
+    tag = "认证"
+)]
 pub async fn register(
     State(state): State<Arc<AppState>>,
     Json(req): Json<RegisterRequest>,
@@ -118,6 +128,17 @@ pub async fn register(
 /// 用户登录
 ///
 /// POST /api/v1/auth/login
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "登录成功", body = inline(vespera_common::Response<vespera_common::LoginResponse>)),
+        (status = 401, description = "用户名或密码错误"),
+        (status = 403, description = "账号已被禁用")
+    ),
+    tag = "认证"
+)]
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<LoginRequest>,
@@ -189,6 +210,16 @@ pub async fn login(
 /// 刷新 Access Token
 ///
 /// POST /api/v1/auth/refresh
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "��新成功", body = inline(vespera_common::Response<vespera_common::RefreshTokenResponse>)),
+        (status = 401, description = "Refresh Token 无效或已过期")
+    ),
+    tag = "认证"
+)]
 pub async fn refresh(
     State(state): State<Arc<AppState>>,
     Json(req): Json<RefreshTokenRequest>,
@@ -245,6 +276,18 @@ pub async fn refresh(
 /// 登出
 ///
 /// POST /api/v1/auth/logout
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "登出成功")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "认证"
+)]
 pub async fn logout(
     auth: AuthUser,
     State(state): State<Arc<AppState>>,
@@ -265,6 +308,18 @@ pub async fn logout(
 /// 获取当前用户信息
 ///
 /// GET /api/v1/auth/me
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/me",
+    responses(
+        (status = 200, description = "获取成功", body = inline(vespera_common::Response<vespera_common::User>)),
+        (status = 401, description = "未认证")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "认证"
+)]
 pub async fn me(
     auth: AuthUser,
     State(state): State<Arc<AppState>>,
@@ -282,6 +337,19 @@ pub async fn me(
 /// 修改密码
 ///
 /// POST /api/v1/auth/change-password
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/change-password",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 200, description = "修改成功"),
+        (status = 401, description = "旧密码错误")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "认证"
+)]
 pub async fn change_password(
     auth: AuthUser,
     State(state): State<Arc<AppState>>,

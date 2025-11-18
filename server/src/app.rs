@@ -1,6 +1,6 @@
 use axum::{
     middleware,
-    routing::{delete, get, post, put},
+    routing::{get, post},
     Router,
 };
 use std::sync::Arc;
@@ -8,9 +8,13 @@ use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
+use utoipa::OpenApi;
+use utoipa_scalar::{Scalar, Servable};
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::db::DbRepo;
 use crate::middleware::verify_agent_token;
+use crate::openapi::ApiDoc;
 use crate::routes;
 use crate::state::AppState;
 
@@ -51,13 +55,13 @@ pub fn create_app(db: DbRepo) -> Router {
             get(routes::api::v1::users::list_users).post(routes::api::v1::users::create_user),
         )
         .route(
-            "/users/:id",
+            "/users/{id}",
             get(routes::api::v1::users::get_user)
                 .put(routes::api::v1::users::update_user)
                 .delete(routes::api::v1::users::delete_user),
         )
         .route(
-            "/users/:id/reset-password",
+            "/users/{id}/reset-password",
             post(routes::api::v1::users::reset_password),
         );
 
@@ -70,15 +74,16 @@ pub fn create_app(db: DbRepo) -> Router {
     // API 路由
     let api_routes = Router::new().nest("/v1", api_v1_routes);
 
+    // 创建 OpenAPI 实例
+    let openapi = ApiDoc::openapi();
+
     // 主路由
     Router::new()
-        // 健康检查端点
         .route("/health", get(routes::health::health_check))
-        // API 路由组
         .nest("/api", api_routes)
-        // 全局中间件
+        .merge(Scalar::with_url("/scalar", openapi.clone()))
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
-        // 全局状态
         .with_state(state)
 }

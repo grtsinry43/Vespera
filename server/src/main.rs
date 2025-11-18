@@ -3,6 +3,7 @@ mod db;
 mod error;
 mod handlers;
 mod middleware;
+mod openapi;
 mod routes;
 mod state;
 mod utils;
@@ -19,6 +20,16 @@ use crate::db::init_db;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // 加载 .env 文件 (开发环境使用，生产环境应使用系统环境变量)
+    // 尝试从多个位置加载 .env 文件
+    if let Err(_) = dotenvy::dotenv() {
+        // 如果当前目录没有 .env，尝试从 server 子目录加载
+        let server_env = std::path::Path::new("server/.env");
+        if server_env.exists() {
+            dotenvy::from_path(server_env).ok();
+        }
+    }
+
     // 初始化日志系统
     tracing_subscriber::registry()
         .with(
@@ -84,6 +95,8 @@ async fn main() -> Result<()> {
     tracing::info!("✅ Server started successfully");
     tracing::info!("🔗 Health check: http://{}/health", bind_addr);
     tracing::info!("📊 API endpoint: http://{}/api/v1", bind_addr);
+    tracing::info!("📚 Scalar UI: http://{}/scalar", bind_addr);
+    tracing::info!("📖 Swagger UI: http://{}/swagger-ui", bind_addr);
 
     // 启动服务器
     axum::serve(listener, app).await?;

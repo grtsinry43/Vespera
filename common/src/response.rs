@@ -1,8 +1,9 @@
 use chrono::Utc;
 use serde::Serialize;
+use utoipa::ToSchema;
 
 /// 统一 API 响应格式
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct Response<T> {
     /// 状态码：0 表示成功，非 0 表示错误
     pub code: i32,

@@ -15,3 +15,6 @@ axum = { version = "0.8", default-features = false, features = ["json"] }
 
 # anyhow 用于错误转换
 anyhow = { workspace = true }
+
+# OpenAPI Documentation
+utoipa = { version = "5.4", features = ["chrono", "uuid"] }
