@@ -1,9 +1,4 @@
-use axum::{
-    extract::Request,
-    http::header::AUTHORIZATION,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::header::AUTHORIZATION, middleware::Next, response::Response};
 
 use vespera_common::ServerError as AppError;
 
@@ -41,12 +36,10 @@ pub async fn verify_agent_token(req: Request, next: Next) -> Result<Response, Ap
         })?;
 
     // 验证格式: "Bearer <token>"
-    let token = auth_header
-        .strip_prefix("Bearer ")
-        .ok_or_else(|| {
-            tracing::warn!("Invalid Authorization header format: {}", auth_header);
-            AppError::Unauthorized("Invalid Authorization header format".to_string())
-        })?;
+    let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+        tracing::warn!("Invalid Authorization header format: {}", auth_header);
+        AppError::Unauthorized("Invalid Authorization header format".to_string())
+    })?;
 
     // 验证令牌是否匹配
     if token != expected_token {
@@ -150,5 +143,123 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+}
+
+// ============================================
+// 用户认证中间件 (JWT)
+// ============================================
+
+use axum::{extract::FromRequestParts, http::request::Parts};
+use vespera_common::UserRole;
+
+/// 认证用户信息 (从 JWT 提取)
+#[derive(Debug, Clone)]
+pub struct AuthUser {
+    pub id: i64,
+    pub username: String,
+    pub role: UserRole,
+}
+
+impl AuthUser {
+    /// 检查是否为管理员
+    pub fn is_admin(&self) -> bool {
+        self.role == UserRole::Admin
+    }
+}
+
+impl<S> FromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        // 1. 从 Authorization header 提取 Bearer token
+        let auth_header = parts
+            .headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
+
+        // 2. 验证格式: "Bearer <token>"
+        let token = auth_header
+            .strip_prefix("Bearer ")
+            .ok_or_else(|| AppError::Unauthorized("Invalid Authorization format".to_string()))?;
+
+        // 3. 获取 JWT secret (从环境变量)
+        let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
+            tracing::warn!("JWT_SECRET not set, using default");
+            "change-this-secret-key-at-least-32-characters-long".to_string()
+        });
+
+        // 4. 验证 JWT
+        let claims = crate::utils::verify_jwt(token, &jwt_secret).map_err(|e| {
+            tracing::warn!("JWT verification failed: {:?}", e);
+            AppError::Unauthorized(format!("Invalid token: {}", e))
+        })?;
+
+        // 5. 解析用户 ID
+        let id = claims
+            .sub
+            .parse::<i64>()
+            .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()))?;
+
+        // 6. 解析角色
+        let role = UserRole::from_str(&claims.role)
+            .ok_or_else(|| AppError::Unauthorized("Invalid role in token".to_string()))?;
+
+        // 7. 构造 AuthUser
+        Ok(AuthUser {
+            id,
+            username: claims.username.unwrap_or_else(|| format!("user_{}", id)),
+            role,
+        })
+    }
+}
+
+/// 管理员用户 (需要 admin 角色)
+#[derive(Debug, Clone)]
+pub struct AdminUser(pub AuthUser);
+
+impl<S> FromRequestParts<S> for AdminUser
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // 1. 先验证是否为认证用户
+        let auth_user = AuthUser::from_request_parts(parts, state).await?;
+
+        // 2. 检查是否为管理员
+        if !auth_user.is_admin() {
+            tracing::warn!(
+                "User {} attempted admin action without permission",
+                auth_user.username
+            );
+            return Err(AppError::Forbidden("Admin permission required".to_string()));
+        }
+
+        Ok(AdminUser(auth_user))
+    }
+}
+
+/// 可选认证用户 (游客模式)
+#[derive(Debug, Clone)]
+pub struct OptionalAuthUser(pub Option<AuthUser>);
+
+impl<S> FromRequestParts<S> for OptionalAuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // 尝试提取 AuthUser,失败则返回 None
+        match AuthUser::from_request_parts(parts, state).await {
+            Ok(user) => Ok(OptionalAuthUser(Some(user))),
+            Err(_) => Ok(OptionalAuthUser(None)),
+        }
     }
 }

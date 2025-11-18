@@ -34,3 +34,14 @@ chrono = { workspace = true }
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "migrate", "macros"] }
 uuid = { workspace = true }
+
+# Authentication & Security
+argon2 = "0.5"                       # 密码哈希 (OWASP 推荐)
+jsonwebtoken = "9"                   # JWT 签名/验证
+sha2 = "0.10"                        # SHA-256 (用于 refresh token 哈希)
+rand = "0.8"                         # 生成随机 token
+base64 = "0.22"                      # Base64 编码
+
+# HTTP utilities
+axum-extra = { version = "0.9", features = ["typed-header"] }
+async-trait = "0.1.89"  # 用于提取 Authorization header

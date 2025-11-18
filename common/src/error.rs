@@ -29,6 +29,9 @@ pub enum ServerError {
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
     /// 自定义错误
     #[error("{0}")]
     Custom(String),
@@ -43,6 +46,7 @@ impl ServerError {
             ServerError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ServerError::NotFound(_) => StatusCode::NOT_FOUND,
             ServerError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            ServerError::Forbidden(_) => StatusCode::FORBIDDEN,
             ServerError::Custom(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -55,6 +59,7 @@ impl ServerError {
             ServerError::BadRequest(_) => 4000,
             ServerError::NotFound(_) => 4004,
             ServerError::Unauthorized(_) => 4001,
+            ServerError::Forbidden(_) => 4003,
             ServerError::Custom(_) => 5999,
         }
     }

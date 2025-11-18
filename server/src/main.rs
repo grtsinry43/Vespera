@@ -5,6 +5,7 @@ mod handlers;
 mod middleware;
 mod routes;
 mod state;
+mod utils;
 
 #[cfg(test)]
 mod test_utils;
@@ -31,6 +32,44 @@ async fn main() -> Result<()> {
 
     // 初始化数据库
     let db_repo = init_db().await?;
+
+    // ============================================
+    // 🔑 首次启动检查:创建管理员
+    // ============================================
+    let user_count = db_repo.users().count_users().await?;
+
+    if user_count == 0 {
+        if let (Ok(username), Ok(password)) = (
+            std::env::var("INITIAL_ADMIN_USERNAME"),
+            std::env::var("INITIAL_ADMIN_PASSWORD"),
+        ) {
+            tracing::info!("📝 No users found. Creating initial admin...");
+
+            let password_hash = crate::utils::hash_password(&password)
+                .map_err(|e| anyhow::anyhow!("Failed to hash password: {}", e))?;
+
+            db_repo
+                .users()
+                .create_user(&username, None, Some(&password_hash), "admin")
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to create admin user: {}", e))?;
+
+            tracing::warn!(
+                "✅ Initial admin '{}' created successfully!",
+                username
+            );
+            tracing::warn!("⚠️  Please remove INITIAL_ADMIN_* environment variables and change the password!");
+        } else {
+            tracing::error!("❌ No users found in database!");
+            tracing::error!("   Set INITIAL_ADMIN_USERNAME and INITIAL_ADMIN_PASSWORD environment variables");
+            tracing::error!("   Example: INITIAL_ADMIN_USERNAME=admin INITIAL_ADMIN_PASSWORD=change-me");
+            return Err(anyhow::anyhow!(
+                "No users exist. Please set INITIAL_ADMIN_USERNAME and INITIAL_ADMIN_PASSWORD"
+            ));
+        }
+    } else {
+        tracing::info!("✓ Found {} existing users", user_count);
+    }
 
     // 获取绑定地址（从环境变量或默认值）
     let bind_addr = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3000".to_string());

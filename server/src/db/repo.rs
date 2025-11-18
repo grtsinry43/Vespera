@@ -3,6 +3,7 @@ use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
 use super::{
     error::{DbError, DbResult},
     models::*,
+    user_repo::UserRepository,
 };
 
 /// SQLite 数据库仓库
@@ -44,12 +45,19 @@ impl SqliteRepo {
             .await?;
 
         // 运行数据库迁移
-        sqlx::migrate!("./migrations/sqlite")
+        sqlx::migrate!("./migrations")
             .run(&pool)
             .await
             .map_err(|e| DbError::MigrationFailed(e.to_string()))?;
 
         Ok(Self { pool })
+    }
+
+    // ========== User Repository  Accessor ==========
+
+    /// 获取用户 Repository
+    pub fn users(&self) -> UserRepository {
+        UserRepository::new(self.pool.clone())
     }
 
     // ========== Node 操作 ==========

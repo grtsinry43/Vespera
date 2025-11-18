@@ -28,7 +28,7 @@ server.toml
 *.log
 
 # Environment
-.env
+server/.env
 .env.local
 
 # Build artifacts

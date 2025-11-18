@@ -1,4 +1,8 @@
-use axum::{middleware, routing::{get, post}, Router};
+use axum::{
+    middleware,
+    routing::{delete, get, post, put},
+    Router,
+};
 use std::sync::Arc;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -12,12 +16,12 @@ use crate::state::AppState;
 
 /// 创建 Axum 应用
 ///
-/// 组装所有路由，配置中间件，返回可运行的 Router
+/// 组装所有路由,配置中间件,返回可运行的 Router
 pub fn create_app(db: DbRepo) -> Router {
     // 创建共享状态
     let state = Arc::new(AppState::new(db));
 
-    // 配置 CORS（允许所有来源，生产环境需要限制）
+    // 配置 CORS(允许所有来源,生产环境需要限制)
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
@@ -26,13 +30,42 @@ pub fn create_app(db: DbRepo) -> Router {
     // Agent 上报端点 (需要鉴权)
     let report_route = Router::new()
         .route("/report", post(routes::api::v1::report::report_handler))
-        .layer(middleware::from_fn(verify_agent_token))
-        .with_state(state.clone());
+        .layer(middleware::from_fn(verify_agent_token));
+
+    // 认证路由 (无需鉴权)
+    let auth_routes = Router::new()
+        .route("/auth/register", post(routes::api::v1::auth::register))
+        .route("/auth/login", post(routes::api::v1::auth::login))
+        .route("/auth/refresh", post(routes::api::v1::auth::refresh))
+        .route("/auth/logout", post(routes::api::v1::auth::logout))
+        .route("/auth/me", get(routes::api::v1::auth::me))
+        .route(
+            "/auth/change-password",
+            post(routes::api::v1::auth::change_password),
+        );
+
+    // 用户管理路由 (需要管理员权限)
+    let user_routes = Router::new()
+        .route(
+            "/users",
+            get(routes::api::v1::users::list_users).post(routes::api::v1::users::create_user),
+        )
+        .route(
+            "/users/:id",
+            get(routes::api::v1::users::get_user)
+                .put(routes::api::v1::users::update_user)
+                .delete(routes::api::v1::users::delete_user),
+        )
+        .route(
+            "/users/:id/reset-password",
+            post(routes::api::v1::users::reset_password),
+        );
 
     // API v1 路由
     let api_v1_routes = Router::new()
         .merge(report_route)
-        .with_state(state.clone());
+        .merge(auth_routes)
+        .merge(user_routes);
 
     // API 路由
     let api_routes = Router::new().nest("/v1", api_v1_routes);

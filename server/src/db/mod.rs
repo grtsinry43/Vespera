@@ -1,11 +1,13 @@
 pub mod error;
 pub mod models;
 mod repo;
+pub mod user_repo;
 
 use error::DbResult;
 use std::sync::Arc;
 
 pub use repo::SqliteRepo;
+pub use user_repo::{UserRepoError, UserRepository};
 
 /// 数据库仓库类型（简化为 Arc<SqliteRepo>）
 pub type DbRepo = Arc<SqliteRepo>;
