@@ -62,6 +62,87 @@ export interface MetricsRangeQuery {
   limit?: number;
 }
 
+// ==================== 用户认证相关 ====================
+
+// 用户角色
+export type UserRole = 'admin' | 'user';
+
+// 用户信息
+export interface User {
+  id: number;
+  username: string;
+  email?: string;
+  role: UserRole;
+  avatar_url?: string;
+  is_active: boolean;
+  created_at: number;
+  updated_at: number;
+  last_login_at?: number;
+}
+
+// 登录请求
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+// 注册请求
+export interface RegisterRequest {
+  username: string;
+  email?: string;
+  password: string;
+  is_admin?: boolean;
+}
+
+// 登录响应
+export interface LoginResponse {
+  access_token: string;
+  refresh_token: string;
+  user: User;
+  expires_at: number;
+}
+
+// Refresh Token 请求
+export interface RefreshTokenRequest {
+  refresh_token: string;
+}
+
+// Refresh Token 响应
+export interface RefreshTokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_at: number;
+}
+
+// 修改密码请求
+export interface ChangePasswordRequest {
+  old_password: string;
+  new_password: string;
+}
+
+// 创建用户请求（管理员）
+export interface CreateUserRequest {
+  username: string;
+  email?: string;
+  password: string;
+  role: UserRole;
+}
+
+// 更新用户请求（管理员）
+export interface UpdateUserRequest {
+  email?: string;
+  avatar_url?: string;
+  is_active?: boolean;
+  role?: UserRole;
+}
+
+// 重置密码请求（管理员）
+export interface ResetPasswordRequest {
+  new_password: string;
+}
+
+// ==================== WebSocket ====================
+
 // WebSocket 消息类型
 export type ClientMessage =
   | { type: 'auth'; token: string }

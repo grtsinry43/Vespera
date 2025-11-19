@@ -177,11 +177,16 @@ pub async fn get_node_metrics(
     let limit = query.limit.min(1000).max(1);
 
     // 查询指标
-    let metrics = state
+    let mut metrics = state
         .db
         .get_metrics_range(node_id, query.start, query.end, limit)
         .await
         .map_err(|e| ServerError::Internal(format!("Failed to get metrics: {}", e)))?;
+
+    // 如果 limit 设置为特殊值 24，则进行采样（用于 24h 图表）
+    if query.limit == 24 && metrics.len() > 24 {
+        metrics = sample_metrics(metrics, 24);
+    }
 
     let node_metrics = metrics.into_iter().map(metric_to_node_metrics).collect();
 
@@ -454,6 +459,68 @@ fn metric_to_node_metrics(metric: Metric) -> NodeMetrics {
         load_5: metric.load_5,
         load_15: metric.load_15,
     }
+}
+
+/// 采样指标数据
+///
+/// 将大量指标数据均匀采样为指定数量的点
+/// 算法：将时间区间分为 `sample_count` 段，每段取最近的一个点
+fn sample_metrics(metrics: Vec<Metric>, sample_count: usize) -> Vec<Metric> {
+    if metrics.len() <= sample_count {
+        return metrics;
+    }
+
+    // 按时间排序（确保有序）
+    let mut sorted_metrics = metrics;
+    sorted_metrics.sort_by_key(|m| m.timestamp);
+
+    if sorted_metrics.is_empty() {
+        return sorted_metrics;
+    }
+
+    let start_time = sorted_metrics.first().unwrap().timestamp;
+    let end_time = sorted_metrics.last().unwrap().timestamp;
+    let time_range = end_time - start_time;
+
+    if time_range == 0 {
+        // 所有数据时间戳相同，直接返回前 sample_count 个
+        return sorted_metrics.into_iter().take(sample_count).collect();
+    }
+
+    // 计算每个采样段的时间间隔
+    let interval = time_range as f64 / sample_count as f64;
+
+    let mut sampled = Vec::with_capacity(sample_count);
+    let mut current_index = 0;
+
+    // 对每个采样段，取该段内最后一个点（最接近段结束时间的点）
+    for i in 0..sample_count {
+        let bucket_end_time = start_time + ((i + 1) as f64 * interval) as i64;
+
+        // 找到该段内的最后一个点
+        while current_index < sorted_metrics.len()
+            && sorted_metrics[current_index].timestamp <= bucket_end_time {
+            current_index += 1;
+        }
+
+        // 回退一个，这是该段的最后一个点
+        if current_index > 0 && current_index - 1 < sorted_metrics.len() {
+            sampled.push(sorted_metrics[current_index - 1].clone());
+        }
+    }
+
+    // 确保包含最后一个点
+    if let Some(last) = sorted_metrics.last() {
+        if sampled.last().map(|m| m.timestamp) != Some(last.timestamp) {
+            if sampled.len() < sample_count {
+                sampled.push(last.clone());
+            } else {
+                sampled[sample_count - 1] = last.clone();
+            }
+        }
+    }
+
+    sampled
 }
 
 #[cfg(test)]

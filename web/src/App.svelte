@@ -5,8 +5,11 @@
     import ServiceCard from "./lib/ServiceCard.svelte";
     import ServerDetail from "./lib/ServerDetail.svelte";
     import StatusOverview from "./lib/StatusOverview.svelte";
+    import Login from "./lib/Login.svelte";
+    import UserMenu from "./lib/UserMenu.svelte";
     import { api } from "./lib/api";
     import { WebSocketManager } from "./lib/websocket";
+    import { authStore, isAuthenticated } from "./lib/authStore";
     import type { PublicNode, ServerMessage } from "./lib/types";
 
     // State
@@ -15,6 +18,7 @@
     let loading = $state(true);
     let error = $state<string | null>(null);
     let ws: WebSocketManager | null = null;
+    let authInitialized = $state(false);
 
     // Real data for servers
     let servers = $state<PublicNode[]>([]);
@@ -105,10 +109,7 @@
 
             // 监听指标更新
             ws.addHandler((message: ServerMessage) => {
-                console.log("[App] Received WS message:", message.type);
-
                 if (message.type === "metrics_update") {
-                    console.log("[App] Metrics update for node:", message.data.node_id, message.data);
                     // 更新对应节点的信息
                     const nodeId = message.data.node_id;
                     servers = servers.map((s) => {
@@ -147,6 +148,11 @@
     }
 
     onMount(() => {
+        // 初始化认证状态
+        authStore.init().finally(() => {
+            authInitialized = true;
+        });
+
         loadNodes();
         initWebSocket();
     });
@@ -157,6 +163,15 @@
         }
     });
 
+    async function handleLogout() {
+        await authStore.logout();
+        if (ws) {
+            ws.disconnect();
+            ws = null;
+        }
+        servers = [];
+    }
+
     function selectServer(server) {
         selectedServer = server;
         currentView = "detail";
@@ -166,6 +181,11 @@
     function goBack() {
         selectedServer = null;
         currentView = "dashboard";
+    }
+
+    function handleNavigate(view: string) {
+        currentView = view;
+        window.scrollTo(0, 0);
     }
 </script>
 
@@ -217,7 +237,7 @@
             </div>
 
             <div class="flex items-center gap-4 sm:gap-6">
-                <!-- Desktop Stats -->
+                <!-- Desktop Stats (始终显示) -->
                 <div
                     class="hidden md:flex items-center gap-8 text-xs font-medium text-zinc-500"
                 >
@@ -263,13 +283,32 @@
                 ></div>
 
                 <ThemeToggle />
+
+                <!-- User Menu or Login Button -->
+                {#if $isAuthenticated}
+                    <UserMenu onLogout={handleLogout} onNavigate={handleNavigate} />
+                {:else}
+                    <button
+                        onclick={() => handleNavigate('login')}
+                        class="px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                    >
+                        Login
+                    </button>
+                {/if}
             </div>
         </div>
     </nav>
 
     <!-- Main Content -->
-    <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        {#if currentView === "dashboard"}
+    <main class="relative z-10">
+        {#if !authInitialized}
+            <!-- Loading initial auth state -->
+            <div class="flex items-center justify-center min-h-[50vh]">
+                <div class="text-sm text-zinc-500">Loading...</div>
+            </div>
+        {:else}
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+                {#if currentView === "dashboard"}
             <div class="space-y-12 animate-in fade-in duration-500">
                 <!-- Status Overview -->
                 <StatusOverview {globalStats} />
@@ -323,6 +362,15 @@
             </div>
         {:else if currentView === "detail" && selectedServer}
             <ServerDetail server={selectedServer} onBack={goBack} {ws} />
+        {:else if currentView === "login"}
+            <Login />
+        {:else if currentView === "admin"}
+            <!-- Admin Panel - 需要创建 -->
+            <div class="text-center py-20">
+                <p class="text-zinc-500">Admin Panel - Coming Soon</p>
+            </div>
+        {/if}
+            </div>
         {/if}
     </main>
 </div>

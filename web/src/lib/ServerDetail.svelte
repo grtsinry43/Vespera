@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from "svelte";
     import { api } from "./api";
+    import MetricsChart from "./MetricsChart.svelte";
     import type { PublicNode, NodeMetrics, ServerMessage } from "./types";
 
     let { server, onBack, ws } = $props<{
@@ -13,6 +14,16 @@
     let latestMetrics = $state<NodeMetrics | null>(null);
     let loading = $state(true);
 
+    // 图表模式：24h 或 realtime
+    let chartMode = $state<"24h" | "realtime">("24h");
+
+    // 图表数据
+    let cpuChartData = $state<{ timestamp: number; value: number }[]>([]);
+    let memChartData = $state<{ timestamp: number; value: number }[]>([]);
+
+    // Realtime 模式的数据缓冲区（最多保留 60 个点，约 5 分钟）
+    const MAX_REALTIME_POINTS = 60;
+
     // 加载节点详情
     async function loadNodeDetail() {
         try {
@@ -23,6 +34,50 @@
             console.error("Failed to load node detail:", err);
         } finally {
             loading = false;
+        }
+    }
+
+    // 加载 24h 历史数据
+    async function load24hData() {
+        try {
+            const now = Math.floor(Date.now() / 1000);
+            const start = now - 86400; // 24 小时前
+
+            const metrics = await api.nodes.getMetrics(server.id, {
+                start,
+                end: now,
+                limit: 24, // 采样 24 个点
+            });
+
+            cpuChartData = metrics.map((m) => ({
+                timestamp: m.timestamp,
+                value: m.cpu_usage,
+            }));
+
+            memChartData = metrics.map((m) => ({
+                timestamp: m.timestamp,
+                value: m.memory_usage,
+            }));
+        } catch (err) {
+            console.error("Failed to load 24h data:", err);
+        }
+    }
+
+    // 切换图表模式
+    function switchMode(mode: "24h" | "realtime") {
+        chartMode = mode;
+        if (mode === "24h") {
+            load24hData();
+        } else {
+            // 切换到 realtime 时，清空数据，等待 WebSocket 推送
+            cpuChartData = [];
+            memChartData = [];
+
+            // 如果有最新指标，添加为第一个点
+            if (latestMetrics) {
+                cpuChartData = [{ timestamp: latestMetrics.timestamp, value: latestMetrics.cpu_usage }];
+                memChartData = [{ timestamp: latestMetrics.timestamp, value: latestMetrics.memory_usage }];
+            }
         }
     }
 
@@ -43,11 +98,27 @@
                 load_5: message.data.load_5,
                 load_15: message.data.load_15,
             };
+
+            // Realtime 模式下更新图表
+            if (chartMode === "realtime") {
+                // 更新 CPU 数据
+                cpuChartData = [
+                    ...cpuChartData,
+                    { timestamp: message.data.timestamp, value: message.data.cpu_usage },
+                ].slice(-MAX_REALTIME_POINTS);
+
+                // 更新内存数据
+                memChartData = [
+                    ...memChartData,
+                    { timestamp: message.data.timestamp, value: message.data.memory_usage },
+                ].slice(-MAX_REALTIME_POINTS);
+            }
         }
     }
 
     onMount(() => {
         loadNodeDetail();
+        load24hData(); // 默认加载 24h 数据
 
         // 订阅该节点的更新
         if (ws) {
@@ -204,50 +275,103 @@
         {/if}
     </div>
 
+    <!-- Mode Toggle -->
+    <div class="flex justify-center gap-2 mb-6">
+        <button
+            onclick={() => switchMode("24h")}
+            class="px-4 py-2 text-xs font-medium rounded-lg transition-all duration-200 {chartMode === '24h'
+                ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900'
+                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}"
+        >
+            24h History
+        </button>
+        <button
+            onclick={() => server.status !== 'offline' && switchMode("realtime")}
+            disabled={server.status === 'offline'}
+            class="px-4 py-2 text-xs font-medium rounded-lg transition-all duration-200 {server.status === 'offline'
+                ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'
+                : chartMode === 'realtime'
+                    ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900'
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}"
+        >
+            <span class="flex items-center gap-1.5">
+                {#if server.status !== 'offline'}
+                    <span class="relative flex h-2 w-2">
+                        <span
+                            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+                        ></span>
+                        <span
+                            class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"
+                        ></span>
+                    </span>
+                {/if}
+                {server.status === 'offline' ? 'Unavailable' : 'Realtime'}
+            </span>
+        </button>
+    </div>
+
     <!-- Charts Section -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- CPU History (Placeholder for now) -->
+        <!-- CPU Chart -->
         <div
             class="bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-xl p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
         >
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center justify-between mb-4">
                 <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">
                     CPU Usage
                 </h3>
                 <span
                     class="text-[10px] font-medium text-zinc-500 uppercase tracking-wider"
-                    >24h History</span
                 >
+                    {chartMode === "24h" ? "24h" : "Live"}
+                </span>
             </div>
-            <div
-                class="h-40 flex items-center justify-center border border-dashed border-black/5 dark:border-zinc-800 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50"
-            >
-                <span class="text-xs text-zinc-400 font-medium"
-                    >Chart Coming Soon</span
+            {#if cpuChartData.length > 0}
+                <MetricsChart
+                    title="CPU Usage"
+                    data={cpuChartData}
+                    color="#3b82f6"
+                />
+            {:else}
+                <div
+                    class="h-[200px] flex items-center justify-center border border-dashed border-black/5 dark:border-zinc-800 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50"
                 >
-            </div>
+                    <span class="text-xs text-zinc-400 font-medium"
+                        >Loading...</span
+                    >
+                </div>
+            {/if}
         </div>
 
-        <!-- Network History (Placeholder) -->
+        <!-- Memory Chart -->
         <div
             class="bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-xl p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
         >
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center justify-between mb-4">
                 <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">
-                    Network Traffic
+                    Memory Usage
                 </h3>
                 <span
                     class="text-[10px] font-medium text-zinc-500 uppercase tracking-wider"
-                    >Total</span
                 >
+                    {chartMode === "24h" ? "24h" : "Live"}
+                </span>
             </div>
-            <div
-                class="h-40 flex items-center justify-center border border-dashed border-black/5 dark:border-zinc-800 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50"
-            >
-                <span class="text-xs text-zinc-400 font-medium"
-                    >Chart Coming Soon</span
+            {#if memChartData.length > 0}
+                <MetricsChart
+                    title="Memory Usage"
+                    data={memChartData}
+                    color="#10b981"
+                />
+            {:else}
+                <div
+                    class="h-[200px] flex items-center justify-center border border-dashed border-black/5 dark:border-zinc-800 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50"
                 >
-            </div>
+                    <span class="text-xs text-zinc-400 font-medium"
+                        >Loading...</span
+                    >
+                </div>
+            {/if}
         </div>
 
         <!-- Disk Info -->
