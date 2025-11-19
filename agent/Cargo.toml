@@ -41,3 +41,5 @@ chrono = { workspace = true }
 # Configuration
 toml = "0.8"
 hostname = "0.4"
+uuid = { workspace = true }
+local-ip-address = "0.6"

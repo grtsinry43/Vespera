@@ -1,8 +1,11 @@
 # Vespera Agent Configuration
 
 [agent]
-# 节点唯一标识符（建议使用主机名或 UUID）
-node_id = "my-server-01"
+# 节点名称（可自定义，用于在 Dashboard 中显示）
+node_name = "my-server-01"
+
+# 节点 UUID（首次启动时自动生成，请勿手动修改）
+# node_uuid = "自动生成"
 
 # Server 地址
 server_url = "http://localhost:3000"
@@ -16,6 +19,9 @@ timeout = 10
 # 重试次数
 retry_attempts = 3
 
+# 节点标签（可选，用于分组管理）
+# tags = ["production", "web-server"]
+
 [auth]
-# 认证密钥（与 Server 端配置一致）
+# 认证密钥（与 Server 端 AGENT_REGISTRATION_TOKEN 环境变量一致）
 secret = "your-secret-key-change-me"

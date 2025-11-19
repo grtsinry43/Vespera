@@ -33,6 +33,17 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
         crate::routes::api::v1::users::delete_user,
         crate::routes::api::v1::users::reset_password,
 
+        // 节点管理 API (普通用户)
+        crate::routes::api::v1::nodes::list_nodes,
+        crate::routes::api::v1::nodes::get_node,
+        crate::routes::api::v1::nodes::get_node_metrics,
+
+        // 节点管理 API (管理员)
+        crate::routes::api::v1::nodes::admin_list_nodes,
+        crate::routes::api::v1::nodes::admin_get_node,
+        crate::routes::api::v1::nodes::admin_update_node,
+        crate::routes::api::v1::nodes::admin_delete_node,
+
         // 告警管理 API
         crate::routes::api::v1::alerts::list_rules,
         crate::routes::api::v1::alerts::get_rule,
@@ -58,6 +69,14 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
             vespera_common::UpdateUserRequest,
             vespera_common::ResetPasswordRequest,
 
+            // 节点相关类型
+            vespera_common::PublicNode,
+            vespera_common::AdminNode,
+            vespera_common::NodeMetrics,
+            vespera_common::DiskMetric,
+            vespera_common::UpdateNodeRequest,
+            vespera_common::MetricsRangeQuery,
+
             // 告警相关类型
             crate::alert::models::AlertRule,
             crate::alert::models::Alert,
@@ -74,6 +93,8 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
     tags(
         (name = "认证", description = "用户认证相关 API"),
         (name = "用户管理", description = "用户管理相关 API (需要管理员权限)"),
+        (name = "节点", description = "节点查询相关 API (普通用户可见)"),
+        (name = "节点管理", description = "节点管理相关 API (需要管理员权限)"),
         (name = "告警", description = "告警规则和告警历史管理 API")
     ),
     modifiers(&SecurityAddon)

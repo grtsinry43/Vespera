@@ -1,9 +1,10 @@
 use anyhow::Result;
 use std::time::Duration;
+use sysinfo::System;
 use tokio::signal;
 use tokio::time::interval;
 use tracing::{error, info};
-use vespera_agent::{Config, Reporter, SystemCollector};
+use vespera_agent::{collector::{get_local_ip, NodeInfo}, Config, Reporter, SystemCollector};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -19,13 +20,39 @@ async fn main() -> Result<()> {
 
     // 加载配置
     let config = load_config()?;
+    let node_uuid = config.get_node_uuid();
+
     info!(
-        "Loaded configuration: node_id={}, server_url={}, report_interval={}s",
-        config.agent.node_id, config.agent.server_url, config.agent.report_interval
+        "Loaded configuration: uuid={}, name={}, server_url={}, report_interval={}s",
+        node_uuid, config.agent.node_name, config.agent.server_url, config.agent.report_interval
+    );
+
+    // 构建节点基础信息
+    let mut system = System::new_all();
+    system.refresh_all();
+
+    let node_info = NodeInfo {
+        uuid: node_uuid,
+        name: config.agent.node_name.clone(),
+        ip_address: get_local_ip(),
+        agent_version: env!("CARGO_PKG_VERSION").to_string(),
+        os_type: std::env::consts::OS.to_string(),
+        os_version: System::long_os_version(),
+        cpu_cores: system.cpus().len() as i64,
+        total_memory: system.total_memory() as i64,
+        tags: config.agent.tags.clone(),
+    };
+
+    info!(
+        "Node info: OS={} {}, CPU={}cores, Memory={}GB",
+        node_info.os_type,
+        node_info.os_version.as_deref().unwrap_or("unknown"),
+        node_info.cpu_cores,
+        node_info.total_memory / 1024 / 1024 / 1024
     );
 
     // 创建采集器和上报器
-    let mut collector = SystemCollector::new(config.agent.node_id.clone());
+    let mut collector = SystemCollector::new(node_info);
     let reporter = Reporter::new(
         config.agent.server_url.clone(),
         config.auth.secret.clone(),
@@ -43,22 +70,16 @@ async fn main() -> Result<()> {
         tokio::select! {
             _ = ticker.tick() => {
                 // 采集数据
-                let metrics = collector.collect();
-
-                // 验证数据
-                if let Err(e) = metrics.validate() {
-                    error!("Metrics validation failed: {}", e);
-                    continue;
-                }
+                let request = collector.collect();
 
                 // 上报数据
-                match reporter.report(&metrics).await {
+                match reporter.report(&request).await {
                     Ok(_) => {
                         info!(
-                            "Metrics reported: CPU={:.1}%, Mem={:.1}%, Disk={:.1}%",
-                            metrics.cpu_usage,
-                            metrics.memory_usage_percent(),
-                            metrics.disk_usage_percent()
+                            "Metrics reported: CPU={:.1}%, Mem={:.1}%, Load={:.2}",
+                            request.metrics.cpu_usage,
+                            request.metrics.memory_usage,
+                            request.metrics.load_1.unwrap_or(0.0)
                         );
                     }
                     Err(e) => {
@@ -79,7 +100,7 @@ async fn main() -> Result<()> {
 
 /// 加载配置文件
 fn load_config() -> Result<Config> {
-    // 优先从环境变量加载（适用于 Docker）
+    // 优先从���境变量加载（适用于 Docker）
     if std::env::var("VESPERA_SERVER_URL").is_ok() {
         info!("Loading configuration from environment variables");
         return Ok(Config::from_env()?);

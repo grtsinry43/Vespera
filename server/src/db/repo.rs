@@ -205,17 +205,68 @@ impl SqliteRepo {
         Ok(nodes)
     }
 
-    /// 删除节点
+    /// 更新节点信息（名称和标签）
+    pub async fn update_node(&self, id: i64, name: Option<&str>, tags: Option<&str>) -> DbResult<()> {
+        let now = chrono::Utc::now().timestamp();
+
+        if let Some(node_name) = name {
+            sqlx::query!(
+                r#"
+                UPDATE nodes
+                SET name = ?, updated_at = ?
+                WHERE id = ?
+                "#,
+                node_name,
+                now,
+                id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        if let Some(tags_json) = tags {
+            sqlx::query!(
+                r#"
+                UPDATE nodes
+                SET tags = ?, updated_at = ?
+                WHERE id = ?
+                "#,
+                tags_json,
+                now,
+                id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// 删除节点（同时删除关联的指标数据）
     pub async fn delete_node(&self, id: i64) -> DbResult<()> {
+        let mut tx = self.pool.begin().await?;
+
+        // 1. 删除关联的指标数据
+        sqlx::query!(
+            r#"
+            DELETE FROM metrics WHERE node_id = ?
+            "#,
+            id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        // 2. 删除节点
         sqlx::query!(
             r#"
             DELETE FROM nodes WHERE id = ?
             "#,
             id
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
+        tx.commit().await?;
         Ok(())
     }
 

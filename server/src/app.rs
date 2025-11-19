@@ -87,12 +87,42 @@ pub fn create_app(db: DbRepo) -> Router {
             post(routes::api::v1::alerts::resolve_alert),
         );
 
+    // 节点管理路由 (普通用户可见)
+    let node_routes = Router::new()
+        .route(
+            "/nodes",
+            get(routes::api::v1::nodes::list_nodes),
+        )
+        .route(
+            "/nodes/{id}",
+            get(routes::api::v1::nodes::get_node),
+        )
+        .route(
+            "/nodes/{id}/metrics",
+            get(routes::api::v1::nodes::get_node_metrics),
+        );
+
+    // 管理员节点管理路由
+    let admin_node_routes = Router::new()
+        .route(
+            "/admin/nodes",
+            get(routes::api::v1::nodes::admin_list_nodes),
+        )
+        .route(
+            "/admin/nodes/{id}",
+            get(routes::api::v1::nodes::admin_get_node)
+                .put(routes::api::v1::nodes::admin_update_node)
+                .delete(routes::api::v1::nodes::admin_delete_node),
+        );
+
     // API v1 路由
     let api_v1_routes = Router::new()
         .merge(report_route)
         .merge(auth_routes)
         .merge(user_routes)
         .merge(alert_routes)
+        .merge(node_routes)
+        .merge(admin_node_routes)
         .route("/ws", get(crate::ws::ws_handler)); // WebSocket 端点
 
     // API 路由

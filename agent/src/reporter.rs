@@ -1,7 +1,7 @@
 use reqwest::Client;
 use serde::Deserialize;
 use thiserror::Error;
-use vespera_common::Metrics;
+use vespera_common::ReportRequest;
 use std::time::Duration;
 
 #[derive(Debug, Error)]
@@ -53,14 +53,14 @@ impl Reporter {
     }
 
     /// 上报指标数据到 Server
-    pub async fn report(&self, metrics: &Metrics) -> Result<(), ReporterError> {
+    pub async fn report(&self, request: &ReportRequest) -> Result<(), ReporterError> {
         let url = format!("{}/api/v1/report", self.server_url.trim_end_matches('/'));
 
         let mut last_error = None;
 
         // 指数退避重试
         for attempt in 0..self.retry_attempts {
-            match self.send_request(&url, metrics).await {
+            match self.send_request(&url, request).await {
                 Ok(_) => {
                     if attempt > 0 {
                         tracing::info!("Report succeeded after {} retries", attempt);
@@ -86,7 +86,7 @@ impl Reporter {
     }
 
     /// 发送单次请求
-    async fn send_request(&self, url: &str, metrics: &Metrics) -> Result<(), ReporterError> {
+    async fn send_request(&self, url: &str, request: &ReportRequest) -> Result<(), ReporterError> {
         tracing::debug!("Sending metrics to {}", url);
 
         let response = self
@@ -94,7 +94,7 @@ impl Reporter {
             .post(url)
             .header("Authorization", format!("Bearer {}", self.secret))
             .header("Content-Type", "application/json")
-            .json(metrics)
+            .json(request)
             .send()
             .await?;
 
