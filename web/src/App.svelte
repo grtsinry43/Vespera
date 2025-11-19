@@ -1,116 +1,25 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from "svelte";
     import ThemeToggle from "./lib/ThemeToggle.svelte";
     import ServerCard from "./lib/ServerCard.svelte";
     import ServiceCard from "./lib/ServiceCard.svelte";
     import ServerDetail from "./lib/ServerDetail.svelte";
     import StatusOverview from "./lib/StatusOverview.svelte";
+    import { api } from "./lib/api";
+    import { WebSocketManager } from "./lib/websocket";
+    import type { PublicNode, ServerMessage } from "./lib/types";
 
     // State
     let currentView = $state("dashboard"); // 'dashboard' | 'detail'
-    let selectedServer = $state(null);
+    let selectedServer = $state<PublicNode | null>(null);
+    let loading = $state(true);
+    let error = $state<string | null>(null);
+    let ws: WebSocketManager | null = null;
 
-    // Mock data for servers
-    let servers = $state([
-        {
-            id: 1,
-            name: "HKG-01",
-            region: "Hong Kong",
-            country: "HK",
-            flag: "🇭🇰",
-            status: "online",
-            uptime: "99.9%",
-            cpu: 45,
-            memory: 62,
-            disk: 28,
-            net_in: 15.4,
-            net_out: 42.1,
-            load: 0.45,
-            ping: 12,
-        },
-        {
-            id: 2,
-            name: "LAX-CN2",
-            region: "Los Angeles",
-            country: "US",
-            flag: "🇺🇸",
-            status: "online",
-            uptime: "99.5%",
-            cpu: 12,
-            memory: 34,
-            disk: 55,
-            net_in: 2.1,
-            net_out: 0.5,
-            load: 0.12,
-            ping: 145,
-        },
-        {
-            id: 3,
-            name: "SGP-DIR",
-            region: "Singapore",
-            country: "SG",
-            flag: "🇸🇬",
-            status: "warning",
-            uptime: "98.2%",
-            cpu: 88,
-            memory: 85,
-            disk: 42,
-            net_in: 85.2,
-            net_out: 120.5,
-            load: 2.1,
-            ping: 45,
-        },
-        {
-            id: 4,
-            name: "TYO-NODE",
-            region: "Tokyo",
-            country: "JP",
-            flag: "🇯🇵",
-            status: "offline",
-            uptime: "0%",
-            cpu: 0,
-            memory: 0,
-            disk: 0,
-            net_in: 0,
-            net_out: 0,
-            load: 0,
-            ping: 0,
-        },
-        {
-            id: 5,
-            name: "FRA-GIA",
-            region: "Frankfurt",
-            country: "DE",
-            flag: "🇩🇪",
-            status: "online",
-            uptime: "99.9%",
-            cpu: 23,
-            memory: 41,
-            disk: 12,
-            net_in: 5.6,
-            net_out: 8.9,
-            load: 0.33,
-            ping: 180,
-        },
-        {
-            id: 6,
-            name: "SEL-BGP",
-            region: "Seoul",
-            country: "KR",
-            flag: "🇰🇷",
-            status: "online",
-            uptime: "99.8%",
-            cpu: 5,
-            memory: 18,
-            disk: 8,
-            net_in: 1.2,
-            net_out: 1.5,
-            load: 0.05,
-            ping: 32,
-        },
-    ]);
+    // Real data for servers
+    let servers = $state<PublicNode[]>([]);
 
-    // Mock data for services
+    // Mock data for services (保留 mock，因为后端暂时没有 service API)
     let services = $state([
         {
             id: 1,
@@ -163,31 +72,89 @@
     let globalStats = $derived({
         active: servers.filter((s) => s.status !== "offline").length,
         total: servers.length,
-        traffic_in: servers.reduce((acc, s) => acc + s.net_in, 0).toFixed(1),
-        traffic_out: servers.reduce((acc, s) => acc + s.net_out, 0).toFixed(1),
+        traffic_in: "0",  // 从实际指标计算
+        traffic_out: "0", // 从实际指标计算
     });
 
-    onMount(() => {
-        const interval = setInterval(() => {
-            servers = servers.map((s) => {
-                if (s.status === "offline") return s;
-                const newCpu = Math.min(
-                    100,
-                    Math.max(0, s.cpu + (Math.random() - 0.5) * 15),
-                );
-                const newMem = Math.min(
-                    100,
-                    Math.max(0, s.memory + (Math.random() - 0.5) * 5),
-                );
-                return {
-                    ...s,
-                    cpu: newCpu,
-                    memory: newMem,
-                    status: newCpu > 80 || newMem > 90 ? "warning" : "online",
-                };
+    // 加载节点列表
+    async function loadNodes() {
+        try {
+            loading = true;
+            error = null;
+            servers = await api.nodes.list(100);
+        } catch (err: any) {
+            error = err.message || "Failed to load nodes";
+            console.error("Failed to load nodes:", err);
+        } finally {
+            loading = false;
+        }
+    }
+
+    // 初始化 WebSocket
+    async function initWebSocket() {
+        const token = localStorage.getItem("token");
+        if (!token) {
+            console.warn("No token found, skipping WebSocket connection");
+            return;
+        }
+
+        try {
+            ws = new WebSocketManager(token);
+            await ws.connect();
+            console.log("WebSocket connected");
+
+            // 监听指标更新
+            ws.addHandler((message: ServerMessage) => {
+                console.log("[App] Received WS message:", message.type);
+
+                if (message.type === "metrics_update") {
+                    console.log("[App] Metrics update for node:", message.data.node_id, message.data);
+                    // 更新对应节点的信息
+                    const nodeId = message.data.node_id;
+                    servers = servers.map((s) => {
+                        if (s.id === nodeId) {
+                            return {
+                                ...s,
+                                status: message.data.cpu_usage > 80 || message.data.memory_usage > 90 ? "warning" : "online",
+                                cpu_usage: message.data.cpu_usage,
+                                memory_usage: message.data.memory_usage,
+                                // 累计流量，转换为 GB
+                                net_in: message.data.network_in / (1024 * 1024 * 1024),
+                                net_out: message.data.network_out / (1024 * 1024 * 1024),
+                            };
+                        }
+                        return s;
+                    });
+                } else if (message.type === "node_online") {
+                    servers = servers.map((s) => {
+                        if (s.id === message.node_id) {
+                            return { ...s, status: "online" };
+                        }
+                        return s;
+                    });
+                } else if (message.type === "node_offline") {
+                    servers = servers.map((s) => {
+                        if (s.id === message.node_id) {
+                            return { ...s, status: "offline" };
+                        }
+                        return s;
+                    });
+                }
             });
-        }, 2000);
-        return () => clearInterval(interval);
+        } catch (err) {
+            console.error("Failed to connect WebSocket:", err);
+        }
+    }
+
+    onMount(() => {
+        loadNodes();
+        initWebSocket();
+    });
+
+    onDestroy(() => {
+        if (ws) {
+            ws.disconnect();
+        }
     });
 
     function selectServer(server) {
@@ -355,7 +322,7 @@
                 </section>
             </div>
         {:else if currentView === "detail" && selectedServer}
-            <ServerDetail server={selectedServer} onBack={goBack} />
+            <ServerDetail server={selectedServer} onBack={goBack} {ws} />
         {/if}
     </main>
 </div>

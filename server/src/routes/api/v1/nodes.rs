@@ -18,7 +18,7 @@ use crate::{
         error::DbError,
         models::{Metric, Node},
     },
-    middleware::auth::{AdminUser, AuthUser},
+    middleware::auth::{AdminUser, AuthUser, OptionalAuthUser},
     state::AppState,
 };
 
@@ -42,6 +42,8 @@ fn default_limit() -> i64 {
 /// 列出所有节点（公开信息）
 ///
 /// GET /api/v1/nodes
+///
+/// **公开接口**：无需认证即可访问
 #[utoipa::path(
     get,
     path = "/api/v1/nodes",
@@ -50,16 +52,12 @@ fn default_limit() -> i64 {
         ("offset" = i64, Query, description = "偏移量，默认 0")
     ),
     responses(
-        (status = 200, description = "获取成功", body = inline(vespera_common::Response<Vec<PublicNode>>)),
-        (status = 401, description = "未认证")
-    ),
-    security(
-        ("bearer_auth" = [])
+        (status = 200, description = "获取成功", body = inline(vespera_common::Response<Vec<PublicNode>>))
     ),
     tag = "节点"
 )]
 pub async fn list_nodes(
-    _auth: AuthUser,
+    _auth: OptionalAuthUser,
     State(state): State<Arc<AppState>>,
     Query(query): Query<PaginationQuery>,
 ) -> Result<Json<ApiResponse<Vec<PublicNode>>>, ServerError> {
@@ -72,8 +70,24 @@ pub async fn list_nodes(
         .await
         .map_err(|e| ServerError::Internal(format!("Failed to list nodes: {}", e)))?;
 
-    // 转换为公开信息
-    let public_nodes = nodes.into_iter().map(node_to_public).collect();
+    // 转换为公开信息，并附带最新指标
+    let mut public_nodes = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        let mut public_node = node_to_public(node.clone());
+
+        // 查询最新指标
+        if let Ok(metrics) = state.db.get_latest_metrics(node.id, 1).await {
+            if let Some(latest) = metrics.into_iter().next() {
+                public_node.cpu_usage = Some(latest.cpu_usage);
+                public_node.memory_usage = Some(latest.memory_usage);
+                // 转换为 MB/s
+                public_node.net_in = Some(latest.net_in_bytes as f64 / (1024.0 * 1024.0));
+                public_node.net_out = Some(latest.net_out_bytes as f64 / (1024.0 * 1024.0));
+            }
+        }
+
+        public_nodes.push(public_node);
+    }
 
     Ok(Json(ApiResponse::success(public_nodes)))
 }
@@ -81,6 +95,8 @@ pub async fn list_nodes(
 /// 获取节点详情（公开信息）
 ///
 /// GET /api/v1/nodes/:id
+///
+/// **公开接口**：无需认证即可访问
 #[utoipa::path(
     get,
     path = "/api/v1/nodes/{id}",
@@ -89,16 +105,12 @@ pub async fn list_nodes(
     ),
     responses(
         (status = 200, description = "获取成功", body = inline(vespera_common::Response<NodeDetail<PublicNode>>)),
-        (status = 404, description = "节点不存在"),
-        (status = 401, description = "未认证")
-    ),
-    security(
-        ("bearer_auth" = [])
+        (status = 404, description = "节点不存在")
     ),
     tag = "节点"
 )]
 pub async fn get_node(
-    _auth: AuthUser,
+    _auth: OptionalAuthUser,
     State(state): State<Arc<AppState>>,
     Path(node_id): Path<i64>,
 ) -> Result<Json<ApiResponse<NodeDetail<PublicNode>>>, ServerError> {
@@ -130,6 +142,8 @@ pub async fn get_node(
 /// 获取节点历史指标
 ///
 /// GET /api/v1/nodes/:id/metrics
+///
+/// **公开接口**：无需认证即可访问
 #[utoipa::path(
     get,
     path = "/api/v1/nodes/{id}/metrics",
@@ -141,16 +155,12 @@ pub async fn get_node(
     ),
     responses(
         (status = 200, description = "获取成功", body = inline(vespera_common::Response<Vec<NodeMetrics>>)),
-        (status = 404, description = "节点不存在"),
-        (status = 401, description = "未认证")
-    ),
-    security(
-        ("bearer_auth" = [])
+        (status = 404, description = "节点不存在")
     ),
     tag = "节点"
 )]
 pub async fn get_node_metrics(
-    _auth: AuthUser,
+    _auth: OptionalAuthUser,
     State(state): State<Arc<AppState>>,
     Path(node_id): Path<i64>,
     Query(query): Query<MetricsRangeQuery>,
@@ -392,6 +402,11 @@ fn node_to_public(node: Node) -> PublicNode {
         total_memory: node.total_memory,
         last_seen: node.last_seen,
         tags: node.tags.and_then(|json| serde_json::from_str(&json).ok()),
+        // 这些字段在后面会被填充
+        cpu_usage: None,
+        memory_usage: None,
+        net_in: None,
+        net_out: None,
     }
 }
 

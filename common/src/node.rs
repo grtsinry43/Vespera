@@ -16,6 +16,11 @@ pub struct PublicNode {
     pub total_memory: i64,
     pub last_seen: i64,
     pub tags: Option<Vec<String>>,
+    // 最新指标（可选）
+    pub cpu_usage: Option<f64>,
+    pub memory_usage: Option<f64>,
+    pub net_in: Option<f64>,  // MB/s
+    pub net_out: Option<f64>, // MB/s
 }
 
 /// 节点完整信息（管理员可见）
@@ -104,6 +109,10 @@ mod tests {
             total_memory: 17179869184,
             last_seen: 1234567890,
             tags: Some(vec!["prod".to_string()]),
+            cpu_usage: Some(45.5),
+            memory_usage: Some(62.3),
+            net_in: Some(15.4),
+            net_out: Some(42.1),
         };
 
         let json = serde_json::to_string(&node).unwrap();

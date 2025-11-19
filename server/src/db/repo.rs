@@ -270,6 +270,34 @@ impl SqliteRepo {
         Ok(())
     }
 
+    /// 查询所有超时的在线节点
+    ///
+    /// 返回 last_seen 早于 before_timestamp 且状态为 online 的节点
+    pub async fn get_stale_nodes(&self, before_timestamp: i64) -> DbResult<Vec<Node>> {
+        let nodes = sqlx::query_as!(
+            Node,
+            r#"
+            SELECT id as "id!: i64",
+                   uuid, name, ip_address, agent_version, os_type,
+                   os_version,
+                   cpu_cores as "cpu_cores!: i64",
+                   total_memory as "total_memory!: i64",
+                   status,
+                   last_seen as "last_seen!: i64",
+                   created_at as "created_at!: i64",
+                   updated_at as "updated_at!: i64",
+                   tags
+            FROM nodes
+            WHERE status = 'online' AND last_seen < ?
+            "#,
+            before_timestamp
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(nodes)
+    }
+
     // ========== Metrics 操作 ==========
 
     /// 插入单条监控指标

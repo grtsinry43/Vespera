@@ -1,12 +1,13 @@
 //! WebSocket 连接处理器
 //!
 //! 负责处理 WebSocket 连接的完整生命周期:
-//! 1. 认证 (首次消息必须是 Auth)
+//! 1. 可选认证 (可以匿名访问公开信息)
 //! 2. 消息循环 (广播接收 + 客户端消息处理)
 //! 3. 心跳检测 (30 秒 ping/pong)
 //!
 //! # 安全
-//! - 连接建立后 5 秒内必须完成认证
+//! - **公开模式**: 匿名用户可以接收所有节点的公开信息更新
+//! - **认证模式**: 已认证用户获得完整访问权限
 //! - 使用 JWT 验证用户身份
 //! - 支持节点订阅过滤 (用户只能看到有权限的节点)
 
@@ -29,8 +30,8 @@ use vespera_common::{ClientMessage, ServerMessage, UserRole};
 use crate::middleware::auth::AuthUser;
 use crate::state::AppState;
 
-/// 认证超时时间 (秒)
-const AUTH_TIMEOUT_SECS: u64 = 5;
+/// 初始消息超时时间 (秒) - 用于等待可选的认证消息
+const INITIAL_MESSAGE_TIMEOUT_SECS: u64 = 5;
 
 /// 心跳间隔 (秒)
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
@@ -39,15 +40,19 @@ const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 ///
 /// GET /api/v1/ws
 ///
-/// # 安全
-/// - 不在 URL 参数中传递 token (避免日志泄露)
-/// - 要求首次 WebSocket 消息包含认证信息
+/// # 公开访问
+/// - **无需认证**: 匿名用户可以连接并接收公开的节点信息
+/// - **可选认证**: 发送 Auth 消息后获得认证用户权限
 ///
 /// # 协议
 /// 1. 客户端连接
-/// 2. 客户端发送 `{"type":"auth","token":"<JWT>"}`
-/// 3. 服务器验证 JWT 并响应 `{"type":"auth_success"}` 或 `{"type":"auth_failed"}`
-/// 4. 进入正常消息循环
+/// 2. (可选) 客户端发送 `{"type":"auth","token":"<JWT>"}` 进行认证
+/// 3. 服务器响应 `{"type":"auth_success"}` 或继续以匿名模式运行
+/// 4. 进入正常消息循环 (接收节点指标更新、告警等)
+///
+/// # 匿名模式限制
+/// - 只能接收公开的节点信息 (MetricsUpdate, NodeOnline, NodeOffline)
+/// - 可以订阅/取消订阅节点
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
@@ -60,64 +65,43 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     // 分离读写流
     let (mut sender, mut receiver) = socket.split();
 
-    // 1. 等待认证消息 (超时 5 秒)
+    // 1. 尝试接收首条消息 (可能是认证消息，也可能是其他消息)
+    // 如果是认证消息则进行认证，否则以匿名模式运行
     let auth_user = match tokio::time::timeout(
-        Duration::from_secs(AUTH_TIMEOUT_SECS),
-        authenticate(&mut receiver),
+        Duration::from_secs(INITIAL_MESSAGE_TIMEOUT_SECS),
+        try_authenticate(&mut receiver, &mut sender),
     )
     .await
     {
-        Ok(Ok(user)) => {
+        Ok(Some(user)) => {
             // 认证成功
             tracing::info!(user_id = user.id, username = %user.username, "WebSocket authenticated");
-
-            // 发送成功响应
-            let success_msg = ServerMessage::AuthSuccess;
-            if let Ok(json) = serde_json::to_string(&success_msg) {
-                let _ = sender.send(Message::Text(json.into())).await;
-            }
-
-            user
+            Some(user)
         }
-        Ok(Err(e)) => {
-            // 认证失败
-            tracing::warn!("WebSocket authentication failed: {}", e);
-
-            let error_msg = ServerMessage::AuthFailed {
-                message: e.to_string(),
-            };
-            if let Ok(json) = serde_json::to_string(&error_msg) {
-                let _ = sender.send(Message::Text(json.into())).await;
-            }
-
-            // 关闭连接
-            let _ = sender.close().await;
-            return;
+        Ok(None) => {
+            // 匿名模式
+            tracing::info!("WebSocket connected in anonymous mode");
+            None
         }
         Err(_) => {
-            // 超时
-            tracing::warn!("WebSocket authentication timeout");
-
-            let error_msg = ServerMessage::AuthFailed {
-                message: "Authentication timeout".to_string(),
-            };
-            if let Ok(json) = serde_json::to_string(&error_msg) {
-                let _ = sender.send(Message::Text(json.into())).await;
-            }
-
-            let _ = sender.close().await;
-            return;
+            // 超时，继续以匿名模式运行
+            tracing::info!("WebSocket initial message timeout, running in anonymous mode");
+            None
         }
     };
 
     // 2. 创建会话
-    let session = WsSession::new(auth_user);
+    let mut session = WsSession::new(auth_user);
 
     // 3. 订阅广播通道
     let mut broadcast_rx = state.broadcaster.subscribe();
 
+    let user_id_str = session.user.as_ref()
+        .map(|u| u.id.to_string())
+        .unwrap_or_else(|| "anonymous".to_string());
+
     tracing::debug!(
-        user_id = session.user.id,
+        user = %user_id_str,
         "WebSocket session started, receiver_count = {}",
         state.broadcaster.receiver_count()
     );
@@ -153,7 +137,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
                         tracing::warn!(
-                            user_id = session.user.id,
+                            user = %user_id_str,
                             lagged_count = n,
                             "WebSocket receiver lagged, messages lost"
                         );
@@ -170,7 +154,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             result = receiver.next() => {
                 match result {
                     Some(Ok(msg)) => {
-                        if let Err(e) = handle_client_message(msg, &mut session.clone()).await {
+                        if let Err(e) = handle_client_message(msg, &mut session, &mut sender).await {
                             tracing::warn!("Error handling client message: {}", e);
                             // 发送错误响应
                             let error_msg = ServerMessage::Error {
@@ -186,7 +170,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         break;
                     }
                     None => {
-                        tracing::debug!(user_id = session.user.id, "WebSocket connection closed");
+                        tracing::debug!(user = %user_id_str, "WebSocket connection closed");
                         break;
                     }
                 }
@@ -205,42 +189,49 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
+    let final_user_str = session.user.as_ref()
+        .map(|u| format!("{} ({})", u.username, u.id))
+        .unwrap_or_else(|| "anonymous".to_string());
+
     tracing::info!(
-        user_id = session.user.id,
-        username = %session.user.username,
+        user = %final_user_str,
         "WebSocket connection terminated"
     );
 }
 
-/// 认证 WebSocket 连接
+/// 尝试认证 WebSocket 连接（可选）
 ///
-/// 等待客户端发送 Auth 消息,验证 JWT
-async fn authenticate(
+/// 等待客户端首条消息:
+/// - 如果是 Auth 消息，则验证 JWT 并返回 Some(AuthUser)
+/// - 如果是其他消息，则返回 None (匿名模式)
+async fn try_authenticate(
     receiver: &mut futures_util::stream::SplitStream<WebSocket>,
-) -> Result<AuthUser, WsError> {
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+) -> Option<AuthUser> {
     use futures_util::StreamExt;
 
     // 等待首条消息
-    let msg = receiver
-        .next()
-        .await
-        .ok_or(WsError::ConnectionClosed)?
-        .map_err(|_| WsError::InvalidMessage)?;
+    let msg = match receiver.next().await {
+        Some(Ok(msg)) => msg,
+        _ => return None, // 连接关闭或错误，以匿名模式运行
+    };
 
     // 必须是 Text 消息
     let text = match msg {
         Message::Text(t) => t.to_string(),
-        _ => return Err(WsError::InvalidMessage),
+        _ => return None, // 非文本消息，以匿名模式运行
     };
 
-    // 解析为 ClientMessage
-    let client_msg: ClientMessage =
-        serde_json::from_str(&text).map_err(|_| WsError::InvalidMessage)?;
+    // 尝试解析为 ClientMessage
+    let client_msg: ClientMessage = match serde_json::from_str(&text) {
+        Ok(msg) => msg,
+        Err(_) => return None, // 解析失败，以匿名模式运行
+    };
 
-    // 必须是 Auth 消息
+    // 检查是否为 Auth 消息
     let token = match client_msg {
         ClientMessage::Auth { token } => token,
-        _ => return Err(WsError::Unauthorized),
+        _ => return None, // 非认证消息，以匿名模式运行
     };
 
     // 验证 JWT
@@ -249,18 +240,55 @@ async fn authenticate(
         "change-this-secret-key-at-least-32-characters-long".to_string()
     });
 
-    let claims = crate::utils::verify_jwt(&token, &jwt_secret)
-        .map_err(|e| WsError::Unauthorized)?;
+    let claims = match crate::utils::verify_jwt(&token, &jwt_secret) {
+        Ok(c) => c,
+        Err(e) => {
+            // 认证失败
+            tracing::warn!("WebSocket JWT verification failed: {:?}", e);
+            let error_msg = ServerMessage::AuthFailed {
+                message: format!("Invalid token: {}", e),
+            };
+            if let Ok(json) = serde_json::to_string(&error_msg) {
+                let _ = sender.send(Message::Text(json.into())).await;
+            }
+            return None;
+        }
+    };
 
     // 解析用户信息
-    let id = claims
-        .sub
-        .parse::<i64>()
-        .map_err(|_| WsError::InvalidMessage)?;
+    let id = match claims.sub.parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => {
+            let error_msg = ServerMessage::AuthFailed {
+                message: "Invalid user ID in token".to_string(),
+            };
+            if let Ok(json) = serde_json::to_string(&error_msg) {
+                let _ = sender.send(Message::Text(json.into())).await;
+            }
+            return None;
+        }
+    };
 
-    let role = UserRole::from_str(&claims.role).ok_or(WsError::InvalidMessage)?;
+    let role = match UserRole::from_str(&claims.role) {
+        Some(r) => r,
+        None => {
+            let error_msg = ServerMessage::AuthFailed {
+                message: "Invalid role in token".to_string(),
+            };
+            if let Ok(json) = serde_json::to_string(&error_msg) {
+                let _ = sender.send(Message::Text(json.into())).await;
+            }
+            return None;
+        }
+    };
 
-    Ok(AuthUser {
+    // 认证成功，发送成功响应
+    let success_msg = ServerMessage::AuthSuccess;
+    if let Ok(json) = serde_json::to_string(&success_msg) {
+        let _ = sender.send(Message::Text(json.into())).await;
+    }
+
+    Some(AuthUser {
         id,
         username: claims.username.unwrap_or_else(|| format!("user_{}", id)),
         role,
@@ -272,47 +300,56 @@ async fn authenticate(
 /// 保存连接状态和订阅信息
 #[derive(Clone)]
 struct WsSession {
-    user: AuthUser,
+    user: Option<AuthUser>,
     subscribed_nodes: HashSet<i64>,
 }
 
 impl WsSession {
-    fn new(user: AuthUser) -> Self {
+    fn new(user: Option<AuthUser>) -> Self {
         Self {
             user,
             subscribed_nodes: HashSet::new(),
         }
     }
 
+    /// 检查是否已认证
+    fn is_authenticated(&self) -> bool {
+        self.user.is_some()
+    }
+
     /// 检查是否应该发送消息
     ///
     /// 过滤规则:
+    /// - 匿名用户只能接收公开信息 (MetricsUpdate, NodeOnline, NodeOffline)
+    /// - 认证用户可以接收所有消息
     /// - 如果未订阅任何节点,发送所有消息
     /// - 如果已订阅节点,只发送订阅节点的消息
     /// - Ping/Error 等全局消息总是发送
     fn should_send_message(&self, msg: &ServerMessage) -> bool {
         match msg {
             ServerMessage::MetricsUpdate(update) => {
-                // 如果未订阅,发送所有
+                // 公开信息，所有用户都可以接收
                 if self.subscribed_nodes.is_empty() {
                     return true;
                 }
-                // 检查是否订阅该节点
                 self.subscribed_nodes.contains(&update.node_id)
             }
             ServerMessage::NodeOnline { node_id, .. } => {
+                // 公开信息，所有用户都可以接收
                 if self.subscribed_nodes.is_empty() {
                     return true;
                 }
                 self.subscribed_nodes.contains(node_id)
             }
             ServerMessage::NodeOffline { node_id, .. } => {
+                // 公开信息，所有用户都可以接收
                 if self.subscribed_nodes.is_empty() {
                     return true;
                 }
                 self.subscribed_nodes.contains(node_id)
             }
             ServerMessage::Alert(alert) => {
+                // 告警信息，所有用户都可以接收（公开信息）
                 if self.subscribed_nodes.is_empty() {
                     return true;
                 }
@@ -327,7 +364,11 @@ impl WsSession {
 }
 
 /// 处理客户端消息
-async fn handle_client_message(msg: Message, session: &mut WsSession) -> Result<(), WsError> {
+async fn handle_client_message(
+    msg: Message,
+    session: &mut WsSession,
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+) -> Result<(), WsError> {
     let text = match msg {
         Message::Text(t) => t.to_string(),
         Message::Close(_) => return Err(WsError::ConnectionClosed),
@@ -343,9 +384,9 @@ async fn handle_client_message(msg: Message, session: &mut WsSession) -> Result<
             Ok(())
         }
         ClientMessage::Subscribe { node_ids } => {
-            // TODO: 验证用户是否有权限查看这些节点
+            // 公开操作，匿名用户也可以订阅节点
             tracing::debug!(
-                user_id = session.user.id,
+                user = session.user.as_ref().map(|u| u.id.to_string()).unwrap_or_else(|| "anonymous".to_string()),
                 node_count = node_ids.len(),
                 "User subscribed to nodes"
             );
@@ -354,7 +395,7 @@ async fn handle_client_message(msg: Message, session: &mut WsSession) -> Result<
         }
         ClientMessage::Unsubscribe { node_ids } => {
             tracing::debug!(
-                user_id = session.user.id,
+                user = session.user.as_ref().map(|u| u.id.to_string()).unwrap_or_else(|| "anonymous".to_string()),
                 node_count = node_ids.len(),
                 "User unsubscribed from nodes"
             );
@@ -363,9 +404,53 @@ async fn handle_client_message(msg: Message, session: &mut WsSession) -> Result<
             }
             Ok(())
         }
-        ClientMessage::Auth { .. } => {
-            // 认证消息不应该在消息循环中出现
-            Err(WsError::InvalidMessage)
+        ClientMessage::Auth { token } => {
+            // 运行时认证（匿名用户后续可以发送认证消息升级权限）
+            if session.is_authenticated() {
+                // 已认证，忽略
+                return Ok(());
+            }
+
+            // 验证 JWT
+            let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
+                tracing::warn!("JWT_SECRET not set, using default");
+                "change-this-secret-key-at-least-32-characters-long".to_string()
+            });
+
+            match crate::utils::verify_jwt(&token, &jwt_secret) {
+                Ok(claims) => {
+                    // 解析用户信息
+                    let id = claims.sub.parse::<i64>().map_err(|_| WsError::InvalidMessage)?;
+                    let role = UserRole::from_str(&claims.role).ok_or(WsError::InvalidMessage)?;
+
+                    session.user = Some(AuthUser {
+                        id,
+                        username: claims.username.unwrap_or_else(|| format!("user_{}", id)),
+                        role,
+                    });
+
+                    tracing::info!(user_id = id, "WebSocket upgraded to authenticated mode");
+
+                    // 发送成功响应
+                    let success_msg = ServerMessage::AuthSuccess;
+                    if let Ok(json) = serde_json::to_string(&success_msg) {
+                        let _ = sender.send(Message::Text(json.into())).await;
+                    }
+
+                    Ok(())
+                }
+                Err(e) => {
+                    // 认证失败
+                    tracing::warn!("WebSocket runtime auth failed: {:?}", e);
+                    let error_msg = ServerMessage::AuthFailed {
+                        message: format!("Invalid token: {}", e),
+                    };
+                    if let Ok(json) = serde_json::to_string(&error_msg) {
+                        let _ = sender.send(Message::Text(json.into())).await;
+                    }
+                    Ok(())
+                }
+            }
         }
     }
 }
@@ -391,15 +476,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_should_send_message_no_subscription() {
+    fn test_should_send_message_anonymous_no_subscription() {
+        let session = WsSession::new(None);
+
+        // 匿名用户未订阅时应该接收所有公开消息
+        let msg = ServerMessage::MetricsUpdate(vespera_common::MetricsUpdate {
+            node_id: 1,
+            node_uuid: "test".to_string(),
+            node_name: "test".to_string(),
+            timestamp: 0,
+            cpu_usage: 0.0,
+            memory_usage: 0.0,
+            memory_used: 0,
+            memory_total: 0,
+            disk_info: vec![],
+            network_in: 0,
+            network_out: 0,
+            load_1: None,
+            load_5: None,
+            load_15: None,
+        });
+
+        assert!(session.should_send_message(&msg));
+    }
+
+    #[test]
+    fn test_should_send_message_authenticated_no_subscription() {
         let user = AuthUser {
             id: 1,
             username: "test".to_string(),
             role: UserRole::User,
         };
-        let session = WsSession::new(user);
+        let session = WsSession::new(Some(user));
 
-        // 未订阅时应该发送所有消息
+        // 认证用户未订阅时应该接收所有消息
         let msg = ServerMessage::MetricsUpdate(vespera_common::MetricsUpdate {
             node_id: 1,
             node_uuid: "test".to_string(),
@@ -427,7 +537,7 @@ mod tests {
             username: "test".to_string(),
             role: UserRole::User,
         };
-        let mut session = WsSession::new(user);
+        let mut session = WsSession::new(Some(user));
         session.subscribed_nodes.insert(1);
         session.subscribed_nodes.insert(2);
 
@@ -447,18 +557,29 @@ mod tests {
 
     #[test]
     fn test_always_send_global_messages() {
+        let session = WsSession::new(None);
+
+        // 全局消息总是发送（即使是匿名用户）
+        assert!(session.should_send_message(&ServerMessage::Ping));
+        assert!(session.should_send_message(&ServerMessage::Error {
+            message: "test".to_string()
+        }));
+    }
+
+    #[test]
+    fn test_anonymous_session() {
+        let session = WsSession::new(None);
+        assert!(!session.is_authenticated());
+    }
+
+    #[test]
+    fn test_authenticated_session() {
         let user = AuthUser {
             id: 1,
             username: "test".to_string(),
             role: UserRole::User,
         };
-        let mut session = WsSession::new(user);
-        session.subscribed_nodes.insert(1);
-
-        // 全局消息总是发送
-        assert!(session.should_send_message(&ServerMessage::Ping));
-        assert!(session.should_send_message(&ServerMessage::Error {
-            message: "test".to_string()
-        }));
+        let session = WsSession::new(Some(user));
+        assert!(session.is_authenticated());
     }
 }

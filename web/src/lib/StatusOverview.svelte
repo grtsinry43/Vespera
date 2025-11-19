@@ -3,30 +3,30 @@
 
     // Mock incident data
     let activeIncidents = $state([
-        {
-            title: "PureFlow KMP API Server 500 错误",
-            time: "Detected 7m ago",
-            description:
-                "The main Ktor backend for the 'PureFlow' cross-platform RSS reader is returning HTTP 500 errors on the /feeds/update endpoint, indicating a deserialization failure after a dependency upgrade.",
-        },
-        {
-            title: "grtblog 主页 SSR 渲染性能下降",
-            time: "Detected 30m ago",
-            description:
-                "The 'grtblog' Next.js frontend is experiencing a Time-To-First-Byte (TTFB) spike from 100ms to 850ms. Profiling suggests inefficient data fetching during Server-Side Rendering (SSR) for the recent posts list.",
-        },
-        {
-            title: "Monorepo Lerna/pnpm workspace 依赖冲突",
-            time: "Detected 2h ago",
-            description:
-                "CI/CD Pipeline Failure: Dependency resolution failed in the main monorepo structure. An outdated version of 'webpack-plugin' in one package is incompatible with the latest Node version used across the rest of the projects.",
-        },
-        {
-            title: "Spring Security OAuth Token 过期策略异常",
-            time: "Detected 1m ago",
-            description:
-                "User sessions for the admin panel are being invalidated prematurely (within 5 minutes instead of 60). The Spring Security configuration for OAuth2 token expiry may have been incorrectly reverted in the last hotfix.",
-        },
+        // {
+        //     title: "PureFlow KMP API Server 500 错误",
+        //     time: "Detected 7m ago",
+        //     description:
+        //         "The main Ktor backend for the 'PureFlow' cross-platform RSS reader is returning HTTP 500 errors on the /feeds/update endpoint, indicating a deserialization failure after a dependency upgrade.",
+        // },
+        // {
+        //     title: "grtblog 主页 SSR 渲染性能下降",
+        //     time: "Detected 30m ago",
+        //     description:
+        //         "The 'grtblog' Next.js frontend is experiencing a Time-To-First-Byte (TTFB) spike from 100ms to 850ms. Profiling suggests inefficient data fetching during Server-Side Rendering (SSR) for the recent posts list.",
+        // },
+        // {
+        //     title: "Monorepo Lerna/pnpm workspace 依赖冲突",
+        //     time: "Detected 2h ago",
+        //     description:
+        //         "CI/CD Pipeline Failure: Dependency resolution failed in the main monorepo structure. An outdated version of 'webpack-plugin' in one package is incompatible with the latest Node version used across the rest of the projects.",
+        // },
+        // {
+        //     title: "Spring Security OAuth Token 过期策略异常",
+        //     time: "Detected 1m ago",
+        //     description:
+        //         "User sessions for the admin panel are being invalidated prematurely (within 5 minutes instead of 60). The Spring Security configuration for OAuth2 token expiry may have been incorrectly reverted in the last hotfix.",
+        // },
     ]);
 
     // // Mock incident data

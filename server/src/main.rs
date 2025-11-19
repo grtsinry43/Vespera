@@ -3,6 +3,7 @@ mod app;
 mod db;
 mod error;
 mod handlers;
+mod health_check;
 mod middleware;
 mod openapi;
 mod routes;

@@ -25,6 +25,9 @@ pub fn create_app(db: DbRepo) -> Router {
     // 创建共享状态
     let state = Arc::new(AppState::new(db));
 
+    // 启动节点健康检查后台任务
+    crate::health_check::spawn_health_check_task(state.clone());
+
     // 配置 CORS(允许所有来源,生产环境需要限制)
     let cors = CorsLayer::new()
         .allow_origin(Any)
