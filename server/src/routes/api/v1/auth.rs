@@ -13,7 +13,7 @@ use vespera_common::{
 };
 
 use crate::{
-    db::{DbRepo, UserRepoError},
+    db::UserRepoError,
     middleware::auth::AuthUser,
     utils::{create_jwt, hash_password, verify_password},
 };

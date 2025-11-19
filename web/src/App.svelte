@@ -1,0 +1,389 @@
+<script lang="ts">
+    import {onMount} from "svelte";
+    import ThemeToggle from "./lib/ThemeToggle.svelte";
+    import ServerCard from "./lib/ServerCard.svelte";
+    import ServiceCard from "./lib/ServiceCard.svelte";
+    import ServerDetail from "./lib/ServerDetail.svelte";
+    import StatusOverview from "./lib/StatusOverview.svelte";
+
+    // State
+    let currentView = $state("dashboard"); // 'dashboard' | 'detail'
+    let selectedServer = $state(null);
+
+    // Mock data for servers
+    let servers = $state([
+        {
+            id: 1,
+            name: "HKG-01",
+            region: "Hong Kong",
+            country: "HK",
+            flag: "🇭🇰",
+            status: "online",
+            uptime: "99.9%",
+            cpu: 45,
+            memory: 62,
+            disk: 28,
+            net_in: 15.4,
+            net_out: 42.1,
+            load: 0.45,
+            ping: 12,
+        },
+        {
+            id: 2,
+            name: "LAX-CN2",
+            region: "Los Angeles",
+            country: "US",
+            flag: "🇺🇸",
+            status: "online",
+            uptime: "99.5%",
+            cpu: 12,
+            memory: 34,
+            disk: 55,
+            net_in: 2.1,
+            net_out: 0.5,
+            load: 0.12,
+            ping: 145,
+        },
+        {
+            id: 3,
+            name: "SGP-DIR",
+            region: "Singapore",
+            country: "SG",
+            flag: "🇸🇬",
+            status: "warning",
+            uptime: "98.2%",
+            cpu: 88,
+            memory: 85,
+            disk: 42,
+            net_in: 85.2,
+            net_out: 120.5,
+            load: 2.1,
+            ping: 45,
+        },
+        {
+            id: 4,
+            name: "TYO-NODE",
+            region: "Tokyo",
+            country: "JP",
+            flag: "🇯🇵",
+            status: "offline",
+            uptime: "0%",
+            cpu: 0,
+            memory: 0,
+            disk: 0,
+            net_in: 0,
+            net_out: 0,
+            load: 0,
+            ping: 0,
+        },
+        {
+            id: 5,
+            name: "FRA-GIA",
+            region: "Frankfurt",
+            country: "DE",
+            flag: "🇩🇪",
+            status: "online",
+            uptime: "99.9%",
+            cpu: 23,
+            memory: 41,
+            disk: 12,
+            net_in: 5.6,
+            net_out: 8.9,
+            load: 0.33,
+            ping: 180,
+        },
+        {
+            id: 6,
+            name: "SEL-BGP",
+            region: "Seoul",
+            country: "KR",
+            flag: "🇰🇷",
+            status: "online",
+            uptime: "99.8%",
+            cpu: 5,
+            memory: 18,
+            disk: 8,
+            net_in: 1.2,
+            net_out: 1.5,
+            load: 0.05,
+            ping: 32,
+        },
+    ]);
+
+    // Mock data for services
+    let services = $state([
+        {
+            id: 1,
+            name: "Main Website",
+            url: "https://vespera.io",
+            type: "http",
+            status: "up",
+            uptime: 99.99,
+            latency: 45,
+        },
+        {
+            id: 2,
+            name: "API Gateway",
+            url: "https://api.vespera.io",
+            type: "http",
+            status: "up",
+            uptime: 99.95,
+            latency: 120,
+        },
+        {
+            id: 3,
+            name: "Database Cluster",
+            url: "tcp://db.vespera.io:5432",
+            type: "tcp",
+            status: "up",
+            uptime: 100,
+            latency: 2,
+        },
+        {
+            id: 4,
+            name: "Redis Cache",
+            url: "tcp://redis.vespera.io:6379",
+            type: "tcp",
+            status: "degraded",
+            uptime: 98.5,
+            latency: 15,
+        },
+        {
+            id: 5,
+            name: "Auth Service",
+            url: "https://auth.vespera.io",
+            type: "http",
+            status: "down",
+            uptime: 95.2,
+            latency: 0,
+        },
+    ]);
+
+    // Derived global stats
+    let globalStats = $derived({
+        active: servers.filter((s) => s.status !== "offline").length,
+        total: servers.length,
+        traffic_in: servers.reduce((acc, s) => acc + s.net_in, 0).toFixed(1),
+        traffic_out: servers.reduce((acc, s) => acc + s.net_out, 0).toFixed(1),
+    });
+
+    onMount(() => {
+        const interval = setInterval(() => {
+            servers = servers.map((s) => {
+                if (s.status === "offline") return s;
+                const newCpu = Math.min(
+                    100,
+                    Math.max(0, s.cpu + (Math.random() - 0.5) * 15),
+                );
+                const newMem = Math.min(
+                    100,
+                    Math.max(0, s.memory + (Math.random() - 0.5) * 5),
+                );
+                return {
+                    ...s,
+                    cpu: newCpu,
+                    memory: newMem,
+                    status: newCpu > 80 || newMem > 90 ? "warning" : "online",
+                };
+            });
+        }, 2000);
+        return () => clearInterval(interval);
+    });
+
+    function selectServer(server) {
+        selectedServer = server;
+        currentView = "detail";
+        window.scrollTo(0, 0);
+    }
+
+    function goBack() {
+        selectedServer = null;
+        currentView = "dashboard";
+    }
+</script>
+
+<div
+        class="min-h-screen pb-20 relative overflow-x-hidden bg-[#f8f9fa] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-300 transition-colors duration-300"
+>
+    <!-- Subtle Ambient Background -->
+    <div class="fixed inset-0 pointer-events-none">
+        <!-- Light Mode Glow -->
+        <div
+                class="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-indigo-200/30 blur-[100px] rounded-full dark:hidden"
+        ></div>
+        <div
+                class="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] bg-emerald-200/30 blur-[100px] rounded-full dark:hidden"
+        ></div>
+
+        <!-- Dark Mode Glow -->
+        <div
+                class="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-900/10 blur-[120px] rounded-full hidden dark:block"
+        ></div>
+        <div
+                class="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-emerald-900/10 blur-[120px] rounded-full hidden dark:block"
+        ></div>
+    </div>
+
+    <!-- Navbar -->
+    <nav
+            class="sticky top-0 z-30 border-b border-zinc-200/60 dark:border-zinc-800 bg-white/70 dark:bg-[#09090b]/80 backdrop-blur-xl"
+    >
+        <div
+                class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between"
+        >
+            <div
+                    class="flex items-center gap-3 cursor-pointer group"
+                    onclick={goBack}
+            >
+                <!-- Logo: Just a simple dot -->
+                <div
+                        class="w-1.5 h-1.5 rounded-full bg-zinc-900 dark:bg-white shadow-sm group-hover:scale-125 transition-transform duration-300"
+                ></div>
+                <span
+                        class="text-sm font-bold tracking-tight text-zinc-900 dark:text-white"
+                >
+                    Vespera <span
+                        class="text-zinc-400 dark:text-zinc-500 font-normal ml-1"
+                >by grtsinry43</span
+                >
+                </span>
+            </div>
+
+            <div class="flex items-center gap-4 sm:gap-6">
+                <!-- Desktop Stats -->
+                <div
+                        class="hidden md:flex items-center gap-8 text-xs font-medium text-zinc-500"
+                >
+                    <div class="flex items-center gap-2">
+                        <span class="relative flex h-2 w-2">
+                            <span
+                                    class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+                            ></span>
+                            <span
+                                    class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"
+                            ></span>
+                        </span>
+                        <span class="text-zinc-700 dark:text-zinc-200"
+                        >{globalStats.active} / {globalStats.total}</span
+                        >
+                        <span class="text-zinc-400">Online</span>
+                    </div>
+                    <div class="h-4 w-px bg-zinc-200 dark:bg-zinc-800"></div>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-1.5">
+                            <span
+                                    class="text-zinc-700 dark:text-zinc-200 font-mono"
+                            >{globalStats.traffic_in}</span
+                            >
+                            <span class="text-[10px] uppercase tracking-wider"
+                            >Mbps In</span
+                            >
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span
+                                    class="text-zinc-700 dark:text-zinc-200 font-mono"
+                            >{globalStats.traffic_out}</span
+                            >
+                            <span class="text-[10px] uppercase tracking-wider"
+                            >Mbps Out</span
+                            >
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                        class="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden md:block"
+                ></div>
+
+                <ThemeToggle/>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        {#if currentView === "dashboard"}
+            <div class="space-y-12 animate-in fade-in duration-500">
+                <!-- Status Overview -->
+                <StatusOverview {globalStats}/>
+
+                <!-- Services Section -->
+                <section>
+                    <div class="flex items-center justify-between mb-6">
+                        <h2
+                                class="text-sm font-semibold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2"
+                        >
+                            Services
+                            <span
+                                    class="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-500"
+                            >{services.length}</span
+                            >
+                        </h2>
+                    </div>
+                    <div
+                            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                    >
+                        {#each services as service}
+                            <ServiceCard {service}/>
+                        {/each}
+                    </div>
+                </section>
+
+                <!-- Servers Section -->
+                <section>
+                    <div class="flex items-center justify-between mb-6">
+                        <h2
+                                class="text-sm font-semibold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2"
+                        >
+                            Infrastructure
+                            <span
+                                    class="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-500"
+                            >{servers.length}</span
+                            >
+                        </h2>
+                    </div>
+                    <div
+                            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
+                    >
+                        {#each servers as server}
+                            <ServerCard
+                                    {server}
+                                    onclick={()=> selectServer(server)}
+                            />
+                        {/each}
+                    </div>
+                </section>
+            </div>
+        {:else if currentView === "detail" && selectedServer}
+            <ServerDetail server={selectedServer} onBack={goBack}/>
+        {/if}
+    </main>
+</div>
+
+<style>
+    /* Custom scrollbar for webkit */
+    :global(::-webkit-scrollbar) {
+        width: 6px;
+    }
+
+    :global(::-webkit-scrollbar-track) {
+        background: transparent;
+    }
+
+    :global(::-webkit-scrollbar-thumb) {
+        background: #d4d4d8;
+        border-radius: 3px;
+    }
+
+    :global(.dark ::-webkit-scrollbar-thumb) {
+        background: #27272a;
+    }
+
+    :global(::-webkit-scrollbar-thumb:hover) {
+        background: #a1a1aa;
+    }
+
+    :global(.dark ::-webkit-scrollbar-thumb:hover) {
+        background: #3f3f46;
+    }
+</style>
