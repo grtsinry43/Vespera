@@ -16,7 +16,7 @@
 </script>
 
 <div
-    class="group relative overflow-hidden bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-300 shadow-sm hover:shadow-md"
+    class="group relative overflow-hidden bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-xl p-5 hover:border-zinc-300/50 dark:hover:border-zinc-700 transition-all duration-300 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] hover:-translate-y-0.5"
 >
     <div class="flex justify-between items-start mb-4">
         <div class="flex items-center gap-3">
@@ -101,11 +101,11 @@
     </div>
 
     <div
-        class="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/50"
+        class="flex items-center justify-between pt-2 border-t border-black/5 dark:border-zinc-800/50"
     >
         <div class="flex items-center gap-2">
             <span
-                class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200 dark:border-zinc-700/50"
+                class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-zinc-50 dark:bg-zinc-800 text-zinc-500 border border-zinc-100 dark:border-zinc-700/50"
             >
                 {service.type}
             </span>

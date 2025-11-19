@@ -29,7 +29,7 @@
 
     <!-- Header Card -->
     <div
-        class="bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-sm border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 shadow-sm"
+        class="bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-xl p-8 shadow-[0_8px_30px_rgba(0,0,0,0.04)] dark:shadow-none"
     >
         <div
             class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
@@ -62,7 +62,7 @@
             </div>
 
             <div
-                class="flex gap-12 w-full md:w-auto pt-6 md:pt-0 border-t md:border-0 border-zinc-100 dark:border-zinc-800"
+                class="flex gap-12 w-full md:w-auto pt-6 md:pt-0 border-t md:border-0 border-black/5 dark:border-zinc-800"
             >
                 <div class="text-left md:text-right">
                     <div
@@ -96,7 +96,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- CPU History -->
         <div
-            class="bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-sm border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm"
+            class="bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-xl p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
         >
             <div class="flex items-center justify-between mb-6">
                 <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">
@@ -123,7 +123,7 @@
 
         <!-- Network History -->
         <div
-            class="bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-sm border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm"
+            class="bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-xl p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
         >
             <div class="flex items-center justify-between mb-6">
                 <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">
@@ -135,7 +135,7 @@
                 >
             </div>
             <div
-                class="h-40 flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50"
+                class="h-40 flex items-center justify-center border border-dashed border-black/5 dark:border-zinc-800 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50"
             >
                 <span class="text-xs text-zinc-400 font-medium"
                     >Chart Visualization</span
@@ -145,7 +145,7 @@
 
         <!-- Disk Info -->
         <div
-            class="bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-sm border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm"
+            class="bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-xl p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
         >
             <h3
                 class="text-sm font-semibold text-zinc-900 dark:text-white mb-6"
@@ -191,10 +191,10 @@
 
     <!-- Process List -->
     <div
-        class="bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-sm border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm"
+        class="bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-xl overflow-hidden shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
     >
         <div
-            class="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center"
+            class="px-6 py-4 border-b border-black/5 dark:border-zinc-800 flex justify-between items-center"
         >
             <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">
                 Top Processes
@@ -213,7 +213,7 @@
                         <th class="px-6 py-3">Command</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                <tbody class="divide-y divide-black/5 dark:divide-zinc-800">
                     <tr
                         class="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors"
                     >

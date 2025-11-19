@@ -3,12 +3,30 @@
 
     // Mock incident data
     let activeIncidents = $state([
-        // {
-        //     title: "Blog Backend Service Exception",
-        //     time: "Detected 5m ago",
-        //     description:
-        //         "Due to backend service issues, the blog is currently operating in static mode. We are working to resolve this as soon as possible.",
-        // },
+        {
+            title: "PureFlow KMP API Server 500 错误",
+            time: "Detected 7m ago",
+            description:
+                "The main Ktor backend for the 'PureFlow' cross-platform RSS reader is returning HTTP 500 errors on the /feeds/update endpoint, indicating a deserialization failure after a dependency upgrade.",
+        },
+        {
+            title: "grtblog 主页 SSR 渲染性能下降",
+            time: "Detected 30m ago",
+            description:
+                "The 'grtblog' Next.js frontend is experiencing a Time-To-First-Byte (TTFB) spike from 100ms to 850ms. Profiling suggests inefficient data fetching during Server-Side Rendering (SSR) for the recent posts list.",
+        },
+        {
+            title: "Monorepo Lerna/pnpm workspace 依赖冲突",
+            time: "Detected 2h ago",
+            description:
+                "CI/CD Pipeline Failure: Dependency resolution failed in the main monorepo structure. An outdated version of 'webpack-plugin' in one package is incompatible with the latest Node version used across the rest of the projects.",
+        },
+        {
+            title: "Spring Security OAuth Token 过期策略异常",
+            time: "Detected 1m ago",
+            description:
+                "User sessions for the admin panel are being invalidated prematurely (within 5 minutes instead of 60). The Spring Security configuration for OAuth2 token expiry may have been incorrectly reverted in the last hotfix.",
+        },
     ]);
 
     // // Mock incident data
@@ -28,7 +46,7 @@
 
 <div class="mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
     <div
-        class="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-md shadow-sm p-6 sm:p-8"
+        class="relative overflow-hidden rounded-2xl border border-black/5 dark:border-zinc-800 bg-white/70 dark:bg-[#18181b]/80 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] dark:shadow-none p-6 sm:p-8"
     >
         <!-- Background Decor -->
         <div
@@ -40,7 +58,7 @@
         >
             <div class="flex items-start gap-5">
                 <div
-                    class="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 shadow-inner"
+                    class="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 shadow-[0_2px_10px_rgba(0,0,0,0.05)] dark:shadow-inner"
                 >
                     {#if systemStatus === "operational"}
                         <svg
@@ -103,7 +121,7 @@
                             All services are running normally. No active
                             incidents reported in the last 24 hours.
                         {:else}
-                            {activeIncidents[0].description}
+                            {activeIncidents[0].title}
                         {/if}
                     </p>
                 </div>
@@ -111,7 +129,7 @@
 
             <!-- Mini Stats -->
             <div
-                class="flex items-center gap-8 sm:border-l border-zinc-100 dark:border-zinc-800 sm:pl-8"
+                class="flex items-center gap-8 sm:border-l border-black/5 dark:border-zinc-800 sm:pl-8"
             >
                 <div>
                     <div
@@ -142,9 +160,7 @@
 
         <!-- Incident List (Collapsible or Always visible if active) -->
         {#if activeIncidents.length > 0}
-            <div
-                class="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-800"
-            >
+            <div class="mt-6 pt-6 border-t border-black/5 dark:border-zinc-800">
                 <h3
                     class="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider mb-3"
                 >
@@ -153,7 +169,7 @@
                 <div class="space-y-3">
                     {#each activeIncidents as incident}
                         <div
-                            class="flex items-center justify-between p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20"
+                            class="flex items-center justify-between p-3 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100/50 dark:border-amber-900/20"
                         >
                             <div class="flex items-center gap-3">
                                 <span class="relative flex h-2 w-2">
@@ -166,7 +182,7 @@
                                 </span>
                                 <span
                                     class="text-sm font-medium text-zinc-900 dark:text-zinc-200"
-                                    >{incident.title}</span
+                                    >{incident.description}</span
                                 >
                             </div>
                             <span class="text-xs text-zinc-500"

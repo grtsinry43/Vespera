@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {onMount} from "svelte";
+    import { onMount } from "svelte";
     import ThemeToggle from "./lib/ThemeToggle.svelte";
     import ServerCard from "./lib/ServerCard.svelte";
     import ServiceCard from "./lib/ServiceCard.svelte";
@@ -203,68 +203,68 @@
 </script>
 
 <div
-        class="min-h-screen pb-20 relative overflow-x-hidden bg-[#f8f9fa] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-300 transition-colors duration-300"
+    class="min-h-screen pb-20 relative overflow-x-hidden bg-[#fafafa] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-300 transition-colors duration-300"
 >
     <!-- Subtle Ambient Background -->
     <div class="fixed inset-0 pointer-events-none">
         <!-- Light Mode Glow -->
         <div
-                class="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-indigo-200/30 blur-[100px] rounded-full dark:hidden"
+            class="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-indigo-200/30 blur-[100px] rounded-full dark:hidden"
         ></div>
         <div
-                class="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] bg-emerald-200/30 blur-[100px] rounded-full dark:hidden"
+            class="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] bg-emerald-200/30 blur-[100px] rounded-full dark:hidden"
         ></div>
 
         <!-- Dark Mode Glow -->
         <div
-                class="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-900/10 blur-[120px] rounded-full hidden dark:block"
+            class="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-900/10 blur-[120px] rounded-full hidden dark:block"
         ></div>
         <div
-                class="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-emerald-900/10 blur-[120px] rounded-full hidden dark:block"
+            class="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-emerald-900/10 blur-[120px] rounded-full hidden dark:block"
         ></div>
     </div>
 
     <!-- Navbar -->
     <nav
-            class="sticky top-0 z-30 border-b border-zinc-200/60 dark:border-zinc-800 bg-white/70 dark:bg-[#09090b]/80 backdrop-blur-xl"
+        class="sticky top-0 z-30 border-b border-black/5 dark:border-zinc-800 bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-2xl supports-[backdrop-filter]:bg-white/60"
     >
         <div
-                class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between"
+            class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between"
         >
             <div
-                    class="flex items-center gap-3 cursor-pointer group"
-                    onclick={goBack}
+                class="flex items-center gap-3 cursor-pointer group"
+                onclick={goBack}
             >
                 <!-- Logo: Just a simple dot -->
                 <div
-                        class="w-1.5 h-1.5 rounded-full bg-zinc-900 dark:bg-white shadow-sm group-hover:scale-125 transition-transform duration-300"
+                    class="w-1.5 h-1.5 rounded-full bg-zinc-900 dark:bg-white shadow-[0_0_10px_rgba(0,0,0,0.1)] group-hover:scale-125 transition-transform duration-300"
                 ></div>
                 <span
-                        class="text-sm font-bold tracking-tight text-zinc-900 dark:text-white"
+                    class="text-sm font-bold tracking-tight text-zinc-900 dark:text-white"
                 >
                     Vespera <span
                         class="text-zinc-400 dark:text-zinc-500 font-normal ml-1"
-                >by grtsinry43</span
-                >
+                        >by grtsinry43</span
+                    >
                 </span>
             </div>
 
             <div class="flex items-center gap-4 sm:gap-6">
                 <!-- Desktop Stats -->
                 <div
-                        class="hidden md:flex items-center gap-8 text-xs font-medium text-zinc-500"
+                    class="hidden md:flex items-center gap-8 text-xs font-medium text-zinc-500"
                 >
                     <div class="flex items-center gap-2">
                         <span class="relative flex h-2 w-2">
                             <span
-                                    class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+                                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
                             ></span>
                             <span
-                                    class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"
+                                class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"
                             ></span>
                         </span>
                         <span class="text-zinc-700 dark:text-zinc-200"
-                        >{globalStats.active} / {globalStats.total}</span
+                            >{globalStats.active} / {globalStats.total}</span
                         >
                         <span class="text-zinc-400">Online</span>
                     </div>
@@ -272,30 +272,30 @@
                     <div class="flex items-center gap-4">
                         <div class="flex items-center gap-1.5">
                             <span
-                                    class="text-zinc-700 dark:text-zinc-200 font-mono"
-                            >{globalStats.traffic_in}</span
+                                class="text-zinc-700 dark:text-zinc-200 font-mono"
+                                >{globalStats.traffic_in}</span
                             >
                             <span class="text-[10px] uppercase tracking-wider"
-                            >Mbps In</span
+                                >Mbps In</span
                             >
                         </div>
                         <div class="flex items-center gap-1.5">
                             <span
-                                    class="text-zinc-700 dark:text-zinc-200 font-mono"
-                            >{globalStats.traffic_out}</span
+                                class="text-zinc-700 dark:text-zinc-200 font-mono"
+                                >{globalStats.traffic_out}</span
                             >
                             <span class="text-[10px] uppercase tracking-wider"
-                            >Mbps Out</span
+                                >Mbps Out</span
                             >
                         </div>
                     </div>
                 </div>
 
                 <div
-                        class="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden md:block"
+                    class="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden md:block"
                 ></div>
 
-                <ThemeToggle/>
+                <ThemeToggle />
             </div>
         </div>
     </nav>
@@ -305,26 +305,26 @@
         {#if currentView === "dashboard"}
             <div class="space-y-12 animate-in fade-in duration-500">
                 <!-- Status Overview -->
-                <StatusOverview {globalStats}/>
+                <StatusOverview {globalStats} />
 
                 <!-- Services Section -->
                 <section>
                     <div class="flex items-center justify-between mb-6">
                         <h2
-                                class="text-sm font-semibold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2"
+                            class="text-sm font-semibold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2"
                         >
                             Services
                             <span
-                                    class="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-500"
-                            >{services.length}</span
+                                class="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-500"
+                                >{services.length}</span
                             >
                         </h2>
                     </div>
                     <div
-                            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
                     >
                         {#each services as service}
-                            <ServiceCard {service}/>
+                            <ServiceCard {service} />
                         {/each}
                     </div>
                 </section>
@@ -333,29 +333,29 @@
                 <section>
                     <div class="flex items-center justify-between mb-6">
                         <h2
-                                class="text-sm font-semibold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2"
+                            class="text-sm font-semibold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2"
                         >
                             Infrastructure
                             <span
-                                    class="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-500"
-                            >{servers.length}</span
+                                class="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-500"
+                                >{servers.length}</span
                             >
                         </h2>
                     </div>
                     <div
-                            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
+                        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
                     >
                         {#each servers as server}
                             <ServerCard
-                                    {server}
-                                    onclick={()=> selectServer(server)}
+                                {server}
+                                onclick={() => selectServer(server)}
                             />
                         {/each}
                     </div>
                 </section>
             </div>
         {:else if currentView === "detail" && selectedServer}
-            <ServerDetail server={selectedServer} onBack={goBack}/>
+            <ServerDetail server={selectedServer} onBack={goBack} />
         {/if}
     </main>
 </div>

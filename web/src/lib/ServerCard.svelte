@@ -24,8 +24,8 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-    class="group relative bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-sm border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5"
     {onclick}
+    class="group relative overflow-hidden bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-2xl p-6 hover:border-zinc-300/50 dark:hover:border-zinc-700 transition-all duration-300 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] cursor-pointer hover:-translate-y-0.5"
 >
     <!-- Header -->
     <div class="flex justify-between items-start mb-8">
@@ -75,48 +75,24 @@
     {#if server.status !== "offline"}
         <div class="space-y-5">
             <!-- CPU & RAM Row -->
-            <div class="grid grid-cols-2 gap-6">
-                <!-- CPU -->
-                <div class="space-y-2">
-                    <div
-                        class="flex justify-between text-[10px] font-medium uppercase tracking-wider text-zinc-500"
+            <div class="space-y-2">
+                <div
+                    class="flex justify-between text-[10px] font-medium uppercase tracking-wider text-zinc-500"
+                >
+                    <span>MEM</span>
+                    <span class="text-zinc-900 dark:text-zinc-200 font-mono"
+                        >{server.memory.toFixed(0)}%</span
                     >
-                        <span>CPU</span>
-                        <span class="text-zinc-900 dark:text-zinc-200 font-mono"
-                            >{server.cpu.toFixed(0)}%</span
-                        >
-                    </div>
-                    <div
-                        class="h-1.5 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"
-                    >
-                        <div
-                            class="h-full {getBarColor(
-                                server.cpu,
-                            )} transition-all duration-500 ease-out"
-                            style="width: {server.cpu}%"
-                        ></div>
-                    </div>
                 </div>
-                <!-- RAM -->
-                <div class="space-y-2">
+                <div
+                    class="h-1.5 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"
+                >
                     <div
-                        class="flex justify-between text-[10px] font-medium uppercase tracking-wider text-zinc-500"
-                    >
-                        <span>MEM</span>
-                        <span class="text-zinc-900 dark:text-zinc-200 font-mono"
-                            >{server.memory.toFixed(0)}%</span
-                        >
-                    </div>
-                    <div
-                        class="h-1.5 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"
-                    >
-                        <div
-                            class="h-full {getBarColor(
-                                server.memory,
-                            )} transition-all duration-500 ease-out"
-                            style="width: {server.memory}%"
-                        ></div>
-                    </div>
+                        class="h-full {getBarColor(
+                            server.memory,
+                        )} transition-all duration-500 ease-out"
+                        style="width: {server.memory}%"
+                    ></div>
                 </div>
             </div>
 
