@@ -65,11 +65,34 @@ pub fn create_app(db: DbRepo) -> Router {
             post(routes::api::v1::users::reset_password),
         );
 
+    // 告警管理路由 (需要认证)
+    let alert_routes = Router::new()
+        .route(
+            "/alerts/rules",
+            get(routes::api::v1::alerts::list_rules).post(routes::api::v1::alerts::create_rule),
+        )
+        .route(
+            "/alerts/rules/{id}",
+            get(routes::api::v1::alerts::get_rule)
+                .put(routes::api::v1::alerts::update_rule)
+                .delete(routes::api::v1::alerts::delete_rule),
+        )
+        .route("/alerts", get(routes::api::v1::alerts::list_alerts))
+        .route(
+            "/alerts/node/{node_id}",
+            get(routes::api::v1::alerts::list_node_alerts),
+        )
+        .route(
+            "/alerts/{id}/resolve",
+            post(routes::api::v1::alerts::resolve_alert),
+        );
+
     // API v1 路由
     let api_v1_routes = Router::new()
         .merge(report_route)
         .merge(auth_routes)
         .merge(user_routes)
+        .merge(alert_routes)
         .route("/ws", get(crate::ws::ws_handler)); // WebSocket 端点
 
     // API 路由

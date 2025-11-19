@@ -1,3 +1,4 @@
+pub mod alert_repo;
 pub mod error;
 pub mod models;
 mod repo;
@@ -6,6 +7,7 @@ pub mod user_repo;
 use error::DbResult;
 use std::sync::Arc;
 
+pub use alert_repo::{AlertRepository, SqliteAlertRepo};
 pub use repo::SqliteRepo;
 pub use user_repo::{UserRepoError, UserRepository};
 

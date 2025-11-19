@@ -119,6 +119,35 @@ pub async fn report_handler(
 
     state.db.insert_metrics(&metric).await?;
 
+    // 2.5 评估告警规则
+    if let Some(alert_engine) = &state.alert_engine {
+        let tags_json = match &req.tags {
+            Some(tags) => serde_json::to_string(tags).ok(),
+            None => None,
+        };
+
+        let node_for_alert = crate::db::models::Node {
+            id: node_id,
+            uuid: uuid_str.clone(),
+            name: node_name.clone(),
+            ip_address: req.ip_address.clone(),
+            agent_version: req.agent_version.clone(),
+            os_type: req.os_type.clone(),
+            os_version: req.os_version.clone(),
+            cpu_cores: req.cpu_cores,
+            total_memory: req.total_memory,
+            status: "online".to_string(),
+            last_seen: req.metrics.timestamp,
+            created_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp(),
+            tags: tags_json,
+        };
+
+        if let Err(e) = alert_engine.evaluate_metrics(&node_for_alert, &metric).await {
+            tracing::error!("Failed to evaluate alerts: {:?}", e);
+        }
+    }
+
     // 3. 广播到 WebSocket 连接
     let ws_update = MetricsUpdate {
         node_id,

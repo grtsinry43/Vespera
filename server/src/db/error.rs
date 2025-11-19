@@ -20,6 +20,12 @@ pub enum DbError {
 
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
+
+    #[error("Query error: {0}")]
+    QueryError(String),
 }
 
 pub type DbResult<T> = Result<T, DbError>;

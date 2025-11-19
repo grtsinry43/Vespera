@@ -11,7 +11,7 @@ path = "src/main.rs"
 vespera-common = { path = "../common" }
 
 # Web Framework
-axum = { version = "0.8", default-features = false, features = ["json", "tokio", "http1", "http2", "ws"] }
+axum = { version = "0.8", default-features = false, features = ["json", "tokio", "http1", "http2", "ws", "query"] }
 tokio = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "cors"] }
@@ -46,6 +46,8 @@ base64 = "0.22"                      # Base64 编码
 # HTTP utilities
 axum-extra = { version = "0.9", features = ["typed-header"] }
 async-trait = "0.1.89"  # 用于提取 Authorization header
+reqwest = { version = "0.12", features = ["json"] }  # HTTP client for webhooks
+lettre = "0.11"  # Email sending
 
 # OpenAPI Documentation
 utoipa = { version = "5.4", features = ["axum_extras", "chrono", "uuid"] }

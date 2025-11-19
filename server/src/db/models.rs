@@ -94,56 +94,6 @@ impl Metric {
     }
 }
 
-/// 告警规则
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AlertRule {
-    pub id: i64,
-    pub name: String,
-    pub node_id: Option<i64>,   // NULL 表示全局规则
-    pub metric_type: String,    // cpu/memory/disk/network
-    pub condition: String,      // gt/lt/eq
-    pub threshold: f64,         // SQLite REAL = f64
-    pub duration: i64,          // 秒
-    pub enabled: bool,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-
-/// 创建告警规则的输入结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AlertRuleCreate {
-    pub name: String,
-    pub node_id: Option<i64>,
-    pub metric_type: String,
-    pub condition: String,
-    pub threshold: f64,
-    pub duration: i64,
-}
-
-/// 告警记录
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Alert {
-    pub id: i64,
-    pub rule_id: i64,
-    pub node_id: i64,
-    pub level: String,          // warning/critical
-    pub message: String,
-    pub value: f64,             // SQLite REAL = f64
-    pub status: String,         // active/resolved
-    pub triggered_at: i64,
-    pub resolved_at: Option<i64>,
-}
-
-/// 创建告警的输入结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AlertCreate {
-    pub rule_id: i64,
-    pub node_id: i64,
-    pub level: String,
-    pub message: String,
-    pub value: f64,
-}
-
 // ============================================
 // 用户认证相关模型
 // ============================================

@@ -32,6 +32,16 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
         crate::routes::api::v1::users::update_user,
         crate::routes::api::v1::users::delete_user,
         crate::routes::api::v1::users::reset_password,
+
+        // 告警管理 API
+        crate::routes::api::v1::alerts::list_rules,
+        crate::routes::api::v1::alerts::get_rule,
+        crate::routes::api::v1::alerts::create_rule,
+        crate::routes::api::v1::alerts::update_rule,
+        crate::routes::api::v1::alerts::delete_rule,
+        crate::routes::api::v1::alerts::list_alerts,
+        crate::routes::api::v1::alerts::list_node_alerts,
+        crate::routes::api::v1::alerts::resolve_alert,
     ),
     components(
         schemas(
@@ -47,11 +57,24 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
             vespera_common::CreateUserRequest,
             vespera_common::UpdateUserRequest,
             vespera_common::ResetPasswordRequest,
+
+            // 告警相关类型
+            crate::alert::models::AlertRule,
+            crate::alert::models::Alert,
+            crate::alert::models::AlertRuleType,
+            crate::alert::models::AlertSeverity,
+            crate::alert::models::AlertRuleConfig,
+            crate::alert::models::NodeFilter,
+            crate::alert::models::NotificationChannel,
+            crate::alert::models::NotificationSettings,
+            crate::db::alert_repo::AlertRuleCreate,
+            crate::db::alert_repo::AlertRuleUpdate,
         )
     ),
     tags(
         (name = "认证", description = "用户认证相关 API"),
-        (name = "用户管理", description = "用户管理相关 API (需要管理员权限)")
+        (name = "用户管理", description = "用户管理相关 API (需要管理员权限)"),
+        (name = "告警", description = "告警规则和告警历史管理 API")
     ),
     modifiers(&SecurityAddon)
 )]

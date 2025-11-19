@@ -1,6 +1,8 @@
 use std::time::Instant;
+use std::sync::Arc;
 use crate::db::DbRepo;
 use crate::ws::Broadcaster;
+use crate::alert::AlertEngine;
 
 /// 应用共享状态
 ///
@@ -16,15 +18,24 @@ pub struct AppState {
 
     /// WebSocket 广播器
     pub broadcaster: Broadcaster,
+
+    /// 告警引擎 (可选)
+    pub alert_engine: Option<Arc<AlertEngine>>,
 }
 
 impl AppState {
     /// 创建新的应用状态
     pub fn new(db: DbRepo) -> Self {
+        let broadcaster = Broadcaster::new();
+
+        // 创建告警引擎
+        let alert_engine = Some(Arc::new(AlertEngine::new(db.clone(), broadcaster.clone())));
+
         Self {
             start_time: Instant::now(),
             db,
-            broadcaster: Broadcaster::new(),
+            broadcaster,
+            alert_engine,
         }
     }
 
