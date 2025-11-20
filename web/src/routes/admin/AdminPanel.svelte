@@ -1,74 +1,132 @@
 <script lang="ts">
-    import { link } from "svelte-spa-router";
+    import AdminLayout from "../../lib/admin/AdminLayout.svelte";
+
+    // Mock data for the dashboard
+    const stats = [
+        { label: "Total Nodes", value: "12", change: "+2", trend: "up" },
+        { label: "Active Users", value: "1,234", change: "+15%", trend: "up" },
+        { label: "System Load", value: "45%", change: "-5%", trend: "down" },
+        { label: "Uptime", value: "99.9%", change: "0%", trend: "neutral" },
+    ];
+
+    const recentActivity = [
+        {
+            action: "New node registered",
+            target: "server-01",
+            time: "2 mins ago",
+            user: "System",
+        },
+        {
+            action: "User login",
+            target: "john.doe",
+            time: "15 mins ago",
+            user: "john.doe",
+        },
+        {
+            action: "Configuration updated",
+            target: "Global Settings",
+            time: "1 hour ago",
+            user: "admin",
+        },
+        {
+            action: "Alert triggered",
+            target: "High CPU Usage",
+            time: "3 hours ago",
+            user: "System",
+        },
+    ];
 </script>
 
-<div class="space-y-8 animate-in fade-in duration-500">
-    <div
-        class="bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-xl p-8 shadow-[0_8px_30px_rgba(0,0,0,0.04)] dark:shadow-none"
-    >
-        <h1
-            class="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight mb-2"
-        >
-            Admin Panel
-        </h1>
-        <p class="text-sm text-zinc-500 mb-8">
-            Manage your monitoring system
-        </p>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <!-- Node Management -->
-            <a
-                href="/admin/nodes"
-                use:link
-                class="group p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:border-zinc-900 dark:hover:border-white transition-all hover:shadow-md"
+<AdminLayout>
+    <div class="max-w-7xl mx-auto p-8 md:p-12 animate-in fade-in duration-500">
+        <!-- Header -->
+        <div class="mb-12">
+            <h1
+                class="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight mb-2"
             >
-                <div class="flex items-center gap-3 mb-3">
-                    <h3
-                        class="text-lg font-semibold text-zinc-900 dark:text-white"
-                    >
-                        Nodes
-                    </h3>
-                </div>
-                <p class="text-sm text-zinc-500">
-                    Manage monitored servers and agents
-                </p>
-            </a>
+                Overview
+            </h1>
+            <p class="text-zinc-500 dark:text-zinc-400">
+                Welcome back, here's what's happening today.
+            </p>
+        </div>
 
-            <!-- User Management -->
-            <a
-                href="/admin/users"
-                use:link
-                class="group p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:border-zinc-900 dark:hover:border-white transition-all hover:shadow-md"
-            >
-                <div class="flex items-center gap-3 mb-3">
-                    <h3
-                        class="text-lg font-semibold text-zinc-900 dark:text-white"
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
+            {#each stats as stat}
+                <div class="group">
+                    <p
+                        class="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1"
                     >
-                        Users
-                    </h3>
+                        {stat.label}
+                    </p>
+                    <div class="flex items-baseline gap-3">
+                        <span
+                            class="text-4xl font-bold text-zinc-900 dark:text-white tracking-tight"
+                            >{stat.value}</span
+                        >
+                        <span
+                            class="text-sm font-medium
+                            {stat.trend === 'up'
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : stat.trend === 'down'
+                                  ? 'text-amber-600 dark:text-amber-400'
+                                  : 'text-zinc-500'}"
+                        >
+                            {stat.change}
+                        </span>
+                    </div>
                 </div>
-                <p class="text-sm text-zinc-500">
-                    Manage user accounts and permissions
-                </p>
-            </a>
+            {/each}
+        </div>
 
-            <!-- Settings -->
-            <a
-                href="/admin/settings"
-                use:link
-                class="group p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:border-zinc-900 dark:hover:border-white transition-all hover:shadow-md"
-            >
-                <div class="flex items-center gap-3 mb-3">
-                    <h3
-                        class="text-lg font-semibold text-zinc-900 dark:text-white"
+        <!-- Recent Activity -->
+        <div>
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">
+                    Recent Activity
+                </h2>
+                <button
+                    class="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                    >View All</button
+                >
+            </div>
+
+            <div class="border-t border-zinc-200 dark:border-zinc-800">
+                {#each recentActivity as activity}
+                    <div
+                        class="py-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors -mx-4 px-4 rounded-lg"
                     >
-                        Settings
-                    </h3>
-                </div>
-                <p class="text-sm text-zinc-500">
-                    Configure system settings and alerts
-                </p>
-            </a>
+                        <div class="flex items-center gap-4">
+                            <div
+                                class="w-2 h-2 rounded-full bg-zinc-300 dark:bg-zinc-600"
+                            ></div>
+                            <div>
+                                <p
+                                    class="text-sm font-medium text-zinc-900 dark:text-white"
+                                >
+                                    {activity.action}
+                                </p>
+                                <p
+                                    class="text-xs text-zinc-500 dark:text-zinc-400"
+                                >
+                                    on {activity.target}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p
+                                class="text-xs font-medium text-zinc-900 dark:text-white"
+                            >
+                                {activity.user}
+                            </p>
+                            <p class="text-xs text-zinc-500 dark:text-zinc-400">
+                                {activity.time}
+                            </p>
+                        </div>
+                    </div>
+                {/each}
+            </div>
         </div>
     </div>
-</div>
+</AdminLayout>

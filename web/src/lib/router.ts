@@ -1,29 +1,24 @@
-import { wrap } from 'svelte-spa-router/wrap';
-import { get } from 'svelte/store';
-import { isAuthenticated } from './authStore';
-import { push } from 'svelte-spa-router';
+import Dashboard from "../routes/Dashboard.svelte";
+import Login from "../routes/Login.svelte";
+import ServerDetail from "../routes/ServerDetail.svelte";
+import NotFound from "../routes/NotFound.svelte";
+import AdminPanel from "../routes/admin/AdminPanel.svelte";
+import NodeManagement from "../routes/admin/NodeManagement.svelte";
+import UserManagement from "../routes/admin/UserManagement.svelte";
+import ServiceManagement from "../routes/admin/ServiceManagement.svelte";
+import Settings from "../routes/admin/Settings.svelte";
+import { wrap } from "svelte-spa-router/wrap";
+import { isAuthenticated } from "./authStore";
+import { get } from "svelte/store";
 
-// Route components
-import Dashboard from '../routes/Dashboard.svelte';
-import Login from '../routes/Login.svelte';
-import ServerDetail from '../routes/ServerDetail.svelte';
-import AdminPanel from '../routes/admin/AdminPanel.svelte';
-import NodeManagement from '../routes/admin/NodeManagement.svelte';
-import UserManagement from '../routes/admin/UserManagement.svelte';
-import Settings from '../routes/admin/Settings.svelte';
-import NotFound from '../routes/NotFound.svelte';
-
-// Auth guard for protected routes
-function requireAuth(detail: any) {
+// 路由守卫：检查是否已登录
+const requireAuth = () => {
     if (!get(isAuthenticated)) {
-        // Redirect to login if not authenticated
-        setTimeout(() => push('/login'), 0);
         return false;
     }
     return true;
-}
+};
 
-// Route configuration
 export const routes = {
     '/': Dashboard,
     '/login': Login,
@@ -34,6 +29,10 @@ export const routes = {
     }),
     '/admin/nodes': wrap({
         component: NodeManagement,
+        conditions: [requireAuth]
+    }),
+    '/admin/services': wrap({
+        component: ServiceManagement,
         conditions: [requireAuth]
     }),
     '/admin/users': wrap({
