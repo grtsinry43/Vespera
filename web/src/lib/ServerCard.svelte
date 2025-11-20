@@ -1,9 +1,9 @@
 <script lang="ts">
+    import { link } from "svelte-spa-router";
     import type { PublicNode } from "./types";
 
-    let { server, onclick } = $props<{
+    let { server } = $props<{
         server: PublicNode;
-        onclick?: () => void;
     }>();
 
     const getStatusColor = (status: string) => {
@@ -42,11 +42,10 @@
     }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-    {onclick}
-    class="group relative overflow-hidden bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-2xl p-6 hover:border-zinc-300/50 dark:hover:border-zinc-700 transition-all duration-300 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] cursor-pointer hover:-translate-y-0.5"
+<a
+    href="/servers/{server.id}"
+    use:link
+    class="group relative overflow-hidden bg-white/60 dark:bg-[#18181b]/80 backdrop-blur-xl border border-black/5 dark:border-zinc-800 rounded-2xl p-6 hover:border-zinc-300/50 dark:hover:border-zinc-700 transition-all duration-300 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] cursor-pointer hover:-translate-y-0.5 block"
 >
     <!-- Header -->
     <div class="flex justify-between items-start mb-4">
@@ -224,4 +223,4 @@
             </div>
         </div>
     {/if}
-</div>
+</a>

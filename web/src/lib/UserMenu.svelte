@@ -1,9 +1,9 @@
 <script lang="ts">
     import { authStore, isAdmin } from "./authStore";
+    import { link, push } from "svelte-spa-router";
 
-    let { onLogout, onNavigate } = $props<{
+    let { onLogout } = $props<{
         onLogout: () => void;
-        onNavigate: (view: string) => void;
     }>();
 
     let showMenu = $state(false);
@@ -17,9 +17,9 @@
         onLogout();
     }
 
-    function handleNavigate(view: string) {
+    function handleNavigate(path: string) {
         showMenu = false;
-        onNavigate(view);
+        push(path);
     }
 
     // Click outside to close
@@ -89,7 +89,7 @@
             <div class="py-1">
                 {#if $isAdmin}
                     <button
-                        onclick={() => handleNavigate('admin')}
+                        onclick={() => handleNavigate('/admin')}
                         class="w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
                     >
                         Admin Panel
