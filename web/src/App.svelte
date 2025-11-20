@@ -18,7 +18,32 @@
         traffic_out: "0",
     });
 
+    // 全局主题初始化函数
+    function initializeTheme() {
+        const savedTheme = localStorage.getItem("theme");
+        const theme = savedTheme || "system";
+
+        if (theme === "system") {
+            if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                document.documentElement.classList.add("dark");
+                document.documentElement.style.colorScheme = "dark";
+            } else {
+                document.documentElement.classList.remove("dark");
+                document.documentElement.style.colorScheme = "light";
+            }
+        } else if (theme === "dark") {
+            document.documentElement.classList.add("dark");
+            document.documentElement.style.colorScheme = "dark";
+        } else {
+            document.documentElement.classList.remove("dark");
+            document.documentElement.style.colorScheme = "light";
+        }
+    }
+
     onMount(() => {
+        // 初始化主题（在认证之前就应用主题）
+        initializeTheme();
+
         // 初始化认证状态
         authStore.init().finally(() => {
             authInitialized = true;

@@ -1,7 +1,7 @@
 use reqwest::Client;
 use serde::Deserialize;
 use thiserror::Error;
-use vespera_common::ReportRequest;
+use vespera_common::{ReportRequest, Service, ServiceCheckResult};
 use std::time::Duration;
 
 #[derive(Debug, Error)]
@@ -34,6 +34,7 @@ pub struct Reporter {
     server_url: String,
     secret: String,
     retry_attempts: u32,
+    user_agent: String,
 }
 
 impl Reporter {
@@ -44,11 +45,15 @@ impl Reporter {
             .build()
             .expect("Failed to create HTTP client");
 
+        // 构建 User-Agent: Vespera-Agent/<version>
+        let user_agent = format!("Vespera-Agent/{}", env!("CARGO_PKG_VERSION"));
+
         Self {
             client,
             server_url,
             secret,
             retry_attempts,
+            user_agent,
         }
     }
 
@@ -94,6 +99,8 @@ impl Reporter {
             .post(url)
             .header("Authorization", format!("Bearer {}", self.secret))
             .header("Content-Type", "application/json")
+            .header("User-Agent", &self.user_agent)
+            .header("X-Vespera-Agent", "true")
             .json(request)
             .send()
             .await?;
@@ -119,6 +126,90 @@ impl Reporter {
         }
 
         tracing::debug!("Metrics reported successfully");
+        Ok(())
+    }
+
+    /// 获取启用的服务列表
+    pub async fn fetch_services(&self) -> Result<Vec<Service>, ReporterError> {
+        let url = format!("{}/api/v1/agent/services", self.server_url.trim_end_matches('/'));
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.secret))
+            .header("User-Agent", &self.user_agent)
+            .header("X-Vespera-Agent", "true")
+            .send()
+            .await?;
+
+        let status = response.status();
+
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(ReporterError::ServerError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        #[derive(Deserialize)]
+        struct ServicesResponse {
+            code: i32,
+            data: Option<Vec<Service>>,
+            msg: Option<String>,
+        }
+
+        let api_response: ServicesResponse = response.json().await?;
+
+        if api_response.code != 0 {
+            return Err(ReporterError::ServerError {
+                status: 200,
+                message: api_response.msg.unwrap_or_else(|| "Unknown error".to_string()),
+            });
+        }
+
+        Ok(api_response.data.unwrap_or_default())
+    }
+
+    /// 上报服务检查结果
+    pub async fn report_service_status(&self, results: &[ServiceCheckResult]) -> Result<(), ReporterError> {
+        if results.is_empty() {
+            return Ok(());
+        }
+
+        let url = format!("{}/api/v1/agent/service-status", self.server_url.trim_end_matches('/'));
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.secret))
+            .header("Content-Type", "application/json")
+            .header("User-Agent", &self.user_agent)
+            .header("X-Vespera-Agent", "true")
+            .json(results)
+            .send()
+            .await?;
+
+        let status = response.status();
+
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(ReporterError::ServerError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        let api_response: ApiResponse = response.json().await?;
+
+        if api_response.code != 0 {
+            return Err(ReporterError::ServerError {
+                status: 200,
+                message: api_response.msg.unwrap_or_else(|| "Unknown error".to_string()),
+            });
+        }
+
+        tracing::debug!("Service status reported successfully: {} results", results.len());
         Ok(())
     }
 }

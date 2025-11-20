@@ -1,96 +1,95 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import AdminLayout from "../../lib/admin/AdminLayout.svelte";
-    import UserModal from "../../lib/admin/UserModal.svelte";
+    import ServiceModal from "../../lib/admin/ServiceModal.svelte";
     import { api } from "../../lib/api";
-    import type { User } from "../../lib/types";
+    import type { ServiceStatusOverview, Service } from "../../lib/types";
 
-    let users = $state<User[]>([]);
+    let services = $state<ServiceStatusOverview[]>([]);
     let loading = $state(true);
     let error = $state<string | null>(null);
 
     // Modal state
     let showModal = $state(false);
-    let editingUser = $state<User | null>(null);
+    let editingService = $state<Service | null>(null);
 
-    // Get time since last login
-    function getTimeSince(timestamp: number | null): string {
-        if (!timestamp) return "Never";
-        const now = Math.floor(Date.now() / 1000);
-        const diff = now - timestamp;
-        if (diff < 60) return `${diff}s ago`;
-        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-        return `${Math.floor(diff / 86400)}d ago`;
+    // Calculate uptime percentage from history
+    function calculateUptime(overview: ServiceStatusOverview): string {
+        const validPoints = overview.history.filter(
+            (p) => p.status !== "unknown",
+        );
+        if (validPoints.length === 0) return "0";
+
+        const upCount = validPoints.filter((p) => p.status === "up").length;
+        return ((upCount / validPoints.length) * 100).toFixed(2);
     }
 
-    async function loadUsers() {
+    // Map status to display status
+    function getDisplayStatus(status: string): string {
+        if (status === "up") return "online";
+        if (status === "down") return "offline";
+        if (status === "timeout" || status === "error") return "degraded";
+        return "unknown";
+    }
+
+    // Convert status to number for history bar (1 = up, 0 = down, 2 = degraded)
+    function statusToNumber(status: string): number {
+        if (status === "up") return 1;
+        if (status === "down") return 0;
+        return 2; // timeout, error, unknown
+    }
+
+    async function loadServices() {
         try {
-            if (users.length === 0) loading = true;
+            // Don't set loading to true on refresh to avoid flickering
+            if (services.length === 0) loading = true;
             error = null;
-            users = await api.users.list();
+            services = await api.services.getAllOverviews();
         } catch (e) {
-            error = e instanceof Error ? e.message : "Failed to load users";
-            console.error("Failed to load users:", e);
+            error = e instanceof Error ? e.message : "Failed to load services";
+            console.error("Failed to load services:", e);
         } finally {
             loading = false;
         }
     }
 
     function handleCreate() {
-        editingUser = null;
+        editingService = null;
         showModal = true;
     }
 
-    function handleEdit(user: User) {
-        editingUser = user;
+    function handleEdit(service: Service) {
+        editingService = service;
         showModal = true;
     }
 
-    async function handleDelete(user: User) {
+    async function handleDelete(service: Service) {
         if (
             !confirm(
-                `Are you sure you want to delete user "${user.username}"? This action cannot be undone.`,
+                `Are you sure you want to delete service "${service.name}"? This action cannot be undone.`,
             )
         ) {
             return;
         }
 
         try {
-            await api.users.delete(user.id);
-            await loadUsers();
+            await api.services.delete(service.id);
+            await loadServices();
         } catch (e) {
-            console.error("Failed to delete user:", e);
-            alert("Failed to delete user");
-        }
-    }
-
-    async function handleResetPassword(user: User) {
-        const newPassword = prompt(
-            `Enter new password for user "${user.username}":`,
-        );
-        if (!newPassword) return;
-
-        if (newPassword.length < 6) {
-            alert("Password must be at least 6 characters");
-            return;
-        }
-
-        try {
-            await api.users.resetPassword(user.id, { new_password: newPassword });
-            alert("Password reset successfully");
-        } catch (e) {
-            console.error("Failed to reset password:", e);
-            alert("Failed to reset password");
+            console.error("Failed to delete service:", e);
+            alert("Failed to delete service");
         }
     }
 
     function handleSave() {
-        loadUsers();
+        loadServices();
     }
 
     onMount(() => {
-        loadUsers();
+        loadServices();
+        // Refresh every 60 seconds
+        const interval = setInterval(loadServices, 60000);
+        return () => clearInterval(interval);
     });
 </script>
 
@@ -101,29 +100,29 @@
                 <h1
                     class="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight mb-2"
                 >
-                    Users
+                    Services
                 </h1>
                 <p class="text-zinc-500 dark:text-zinc-400">
-                    Manage user access and permissions.
+                    Monitor and manage your external services.
                 </p>
             </div>
             <button
                 on:click={handleCreate}
                 class="px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-medium rounded-md hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors"
             >
-                Create User
+                Add Service
             </button>
         </div>
 
-        {#if loading && users.length === 0}
+        {#if loading && services.length === 0}
             <div class="flex justify-center items-center py-12">
-                <div class="text-zinc-500">Loading users...</div>
+                <div class="text-zinc-500">Loading services...</div>
             </div>
         {:else if error}
             <div class="flex justify-center items-center py-12">
                 <div class="text-red-500">Error: {error}</div>
             </div>
-        {:else if users.length === 0}
+        {:else if services.length === 0}
             <div
                 class="flex flex-col justify-center items-center py-20 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl"
             >
@@ -140,22 +139,32 @@
                         stroke-width="2"
                         stroke-linecap="round"
                         stroke-linejoin="round"
-                        ><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg
+                        ><rect x="2" y="2" width="20" height="8" rx="2" ry="2"
+                        ></rect><rect
+                            x="2"
+                            y="14"
+                            width="20"
+                            height="8"
+                            rx="2"
+                            ry="2"
+                        ></rect><line x1="6" y1="6" x2="6.01" y2="6"
+                        ></line><line x1="6" y1="18" x2="6.01" y2="18"
+                        ></line></svg
                     >
                 </div>
                 <h3
                     class="text-lg font-medium text-zinc-900 dark:text-white mb-1"
                 >
-                    No users created
+                    No services configured
                 </h3>
                 <p class="text-zinc-500 dark:text-zinc-400 mb-6">
-                    Get started by creating your first user.
+                    Get started by adding your first service to monitor.
                 </p>
                 <button
                     on:click={handleCreate}
                     class="px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-medium rounded-md hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors"
                 >
-                    Create User
+                    Add Service
                 </button>
             </div>
         {:else}
@@ -165,19 +174,23 @@
                         <tr class="border-b border-zinc-200 dark:border-zinc-800">
                             <th
                                 class="py-4 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wider"
-                                >User</th
+                                >Service Name</th
                             >
                             <th
                                 class="py-4 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wider"
-                                >Role</th
+                                >Type</th
                             >
                             <th
                                 class="py-4 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wider"
-                                >Email</th
+                                >Target</th
                             >
                             <th
                                 class="py-4 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wider"
-                                >Last Login</th
+                                >Status</th
+                            >
+                            <th
+                                class="py-4 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wider"
+                                >Uptime (30h)</th
                             >
                             <th
                                 class="py-4 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wider text-right"
@@ -185,26 +198,54 @@
                             >
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                        {#each users as user}
+                    <tbody
+                        class="divide-y divide-zinc-100 dark:divide-zinc-800/50"
+                    >
+                        {#each services as overview}
+                            {@const displayStatus = getDisplayStatus(
+                                overview.current_status,
+                            )}
+                            {@const uptime = calculateUptime(overview)}
                             <tr
                                 class="group hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors"
                             >
                                 <td class="py-4 px-4">
                                     <div class="flex items-center gap-3">
                                         <div
-                                            class="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-xs font-medium text-zinc-600 dark:text-zinc-300"
-                                        >
-                                            {user.username.charAt(0).toUpperCase()}
-                                        </div>
-                                        <div>
+                                            class="w-2 h-2 rounded-full {displayStatus ===
+                                            'online'
+                                                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                                                : displayStatus === 'degraded'
+                                                  ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                                                  : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]'}"
+                                        ></div>
+                                        <div class="flex-1">
                                             <div
                                                 class="text-sm font-medium text-zinc-900 dark:text-white"
                                             >
-                                                {user.username}
+                                                {overview.service.name}
                                             </div>
-                                            <div class="text-[10px] text-zinc-500">
-                                                ID: {user.id}
+                                            {#if !overview.service.enabled}
+                                                <div
+                                                    class="text-[10px] text-zinc-400 uppercase tracking-wider mt-0.5"
+                                                >
+                                                    Disabled
+                                                </div>
+                                            {/if}
+                                            <!-- Uptime History Bar -->
+                                            <div class="mt-2">
+                                                <div class="flex items-center gap-[2px] h-1.5">
+                                                    {#each overview.history as point, i}
+                                                        {@const status = statusToNumber(point.status)}
+                                                        <div
+                                                            class="flex-1 rounded-full h-full transition-all duration-300 hover:scale-y-150 cursor-help"
+                                                            class:bg-emerald-500={status === 1}
+                                                            class:bg-rose-500={status === 0}
+                                                            class:bg-amber-500={status === 2}
+                                                            title={`Check ${i + 1}: ${status === 1 ? "Up" : status === 0 ? "Down" : "Degraded"}`}
+                                                        ></div>
+                                                    {/each}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -213,22 +254,34 @@
                                     <span
                                         class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
                                     >
-                                        {user.is_admin ? "Administrator" : "User"}
+                                        {overview.service.type.toUpperCase()}
                                     </span>
                                 </td>
+                                <td
+                                    class="py-4 px-4 text-sm text-zinc-500 dark:text-zinc-400 font-mono"
+                                    >{overview.service.target}</td
+                                >
                                 <td class="py-4 px-4">
-                                    <span class="text-sm text-zinc-500 dark:text-zinc-400">
-                                        {user.email || "—"}
+                                    <span
+                                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                                        {displayStatus === 'online'
+                                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                                            : displayStatus === 'degraded'
+                                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
+                                              : 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400'}"
+                                    >
+                                        {displayStatus}
                                     </span>
                                 </td>
                                 <td
                                     class="py-4 px-4 text-sm text-zinc-500 dark:text-zinc-400"
-                                    >{getTimeSince(user.last_login_at)}</td
+                                    >{uptime}%</td
                                 >
                                 <td class="py-4 px-4 text-right">
                                     <div class="flex items-center justify-end gap-2">
                                         <button
-                                            on:click={() => handleEdit(user)}
+                                            on:click={() =>
+                                                handleEdit(overview.service)}
                                             class="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-all"
                                             title="Edit"
                                         >
@@ -250,25 +303,8 @@
                                             >
                                         </button>
                                         <button
-                                            on:click={() => handleResetPassword(user)}
-                                            class="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded transition-all"
-                                            title="Reset Password"
-                                        >
-                                            <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                width="16"
-                                                height="16"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="2"
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                ><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg
-                                            >
-                                        </button>
-                                        <button
-                                            on:click={() => handleDelete(user)}
+                                            on:click={() =>
+                                                handleDelete(overview.service)}
                                             class="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-all"
                                             title="Delete"
                                         >
@@ -308,9 +344,9 @@
         {/if}
     </div>
 
-    <UserModal
+    <ServiceModal
         bind:show={showModal}
-        bind:user={editingUser}
+        service={editingService}
         on:save={handleSave}
         on:close={() => (showModal = false)}
     />

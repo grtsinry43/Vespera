@@ -4,6 +4,7 @@ use super::{
     alert_repo::{AlertRepository, SqliteAlertRepo},
     error::{DbError, DbResult},
     models::*,
+    service_repo::{ServiceRepository, SqliteServiceRepo},
     user_repo::UserRepository,
 };
 
@@ -66,6 +67,13 @@ impl SqliteRepo {
     /// 获取告警 Repository
     pub fn alerts(&self) -> SqliteAlertRepo {
         SqliteAlertRepo::new(self.pool.clone())
+    }
+
+    // ========== Service Repository Accessor ==========
+
+    /// 获取服务监控 Repository
+    pub fn services(&self) -> SqliteServiceRepo {
+        SqliteServiceRepo::new(self.pool.clone())
     }
 
     // ========== Node 操作 ==========

@@ -16,7 +16,7 @@ pub enum DbError {
     NotFound,
 
     #[error("Serialization error: {0}")]
-    SerializationError(#[from] serde_json::Error),
+    SerializationError(String),
 
     #[error("Invalid input: {0}")]
     InvalidInput(String),
@@ -26,6 +26,15 @@ pub enum DbError {
 
     #[error("Query error: {0}")]
     QueryError(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
+}
+
+impl From<serde_json::Error> for DbError {
+    fn from(err: serde_json::Error) -> Self {
+        DbError::SerializationError(err.to_string())
+    }
 }
 
 pub type DbResult<T> = Result<T, DbError>;

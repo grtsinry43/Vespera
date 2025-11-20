@@ -1,6 +1,6 @@
 use axum::{
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use std::sync::Arc;
@@ -27,6 +27,9 @@ pub fn create_app(db: DbRepo) -> Router {
 
     // 启动节点健康检查后台任务
     crate::health_check::spawn_health_check_task(state.clone());
+
+    // 启动数据清理后台任务
+    crate::cleanup::spawn_cleanup_task(state.clone());
 
     // 配置 CORS(允许所有来源,生产环境需要限制)
     let cors = CorsLayer::new()
@@ -118,6 +121,44 @@ pub fn create_app(db: DbRepo) -> Router {
                 .delete(routes::api::v1::nodes::admin_delete_node),
         );
 
+    // 服务监控路由
+    let service_routes = Router::new()
+        .route(
+            "/services",
+            get(routes::api::v1::services::list_services)
+                .post(routes::api::v1::services::create_service),
+        )
+        .route(
+            "/services/all/overview",
+            get(routes::api::v1::services::get_all_services_overview),
+        )
+        .route(
+            "/services/{id}",
+            get(routes::api::v1::services::get_service)
+                .put(routes::api::v1::services::update_service)
+                .delete(routes::api::v1::services::delete_service),
+        )
+        .route(
+            "/services/{id}/status",
+            get(routes::api::v1::services::get_service_status),
+        )
+        .route(
+            "/services/{id}/overview",
+            get(routes::api::v1::services::get_service_overview),
+        );
+
+    // Agent 服务监控路由 (需要鉴权)
+    let agent_service_routes = Router::new()
+        .route(
+            "/agent/services",
+            get(routes::api::v1::services::agent_get_services),
+        )
+        .route(
+            "/agent/service-status",
+            post(routes::api::v1::services::agent_report_status),
+        )
+        .layer(middleware::from_fn(verify_agent_token));
+
     // API v1 路由
     let api_v1_routes = Router::new()
         .merge(report_route)
@@ -126,6 +167,8 @@ pub fn create_app(db: DbRepo) -> Router {
         .merge(alert_routes)
         .merge(node_routes)
         .merge(admin_node_routes)
+        .merge(service_routes)
+        .merge(agent_service_routes)
         .route("/ws", get(crate::ws::ws_handler)); // WebSocket 端点
 
     // API 路由

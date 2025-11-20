@@ -185,3 +185,95 @@ export interface AlertData {
   message: string;
   triggered_at: number;
 }
+
+// ==================== 管理员节点信息 ====================
+
+export interface AdminNode {
+  id: number;
+  uuid: string;
+  name: string;
+  ip_address: string;
+  agent_version: string;
+  os_type: string;
+  os_version?: string;
+  cpu_cores: number;
+  total_memory: number;
+  status: NodeStatus;
+  last_seen: number;
+  created_at: number;
+  updated_at: number;
+  tags?: string[];
+}
+
+export interface UpdateNodeRequest {
+  name?: string;
+  tags?: string[];
+}
+
+// ==================== 服务监控相关 ====================
+
+// 服务类型
+export type ServiceType = 'http' | 'tcp';
+
+// 服务状态
+export type ServiceStatus = 'up' | 'down' | 'timeout' | 'error' | 'unknown';
+
+// 服务配置
+export interface Service {
+  id: number;
+  node_id?: number;
+  name: string;
+  type: ServiceType;
+  target: string;
+  check_interval: number;
+  timeout: number;
+  method?: string;
+  expected_code?: number;
+  expected_body?: string;
+  headers?: Record<string, string>;
+  enabled: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+// 服务状态历史点
+export interface ServiceStatusPoint {
+  timestamp: number;
+  status: ServiceStatus;
+  response_time?: number;
+}
+
+// 服务状态概览
+export interface ServiceStatusOverview {
+  service: Service;
+  current_status: ServiceStatus;
+  history: ServiceStatusPoint[];
+}
+
+// 创建服务请求
+export interface ServiceCreate {
+  node_id?: number;
+  name: string;
+  type: ServiceType;
+  target: string;
+  check_interval?: number;
+  timeout?: number;
+  method?: string;
+  expected_code?: number;
+  expected_body?: string;
+  headers?: Record<string, string>;
+  enabled?: boolean;
+}
+
+// 更新服务请求
+export interface ServiceUpdate {
+  name?: string;
+  target?: string;
+  check_interval?: number;
+  timeout?: number;
+  method?: string;
+  expected_code?: number;
+  expected_body?: string;
+  headers?: Record<string, string>;
+  enabled?: boolean;
+}

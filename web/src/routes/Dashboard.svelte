@@ -5,7 +5,7 @@
     import StatusOverview from "../lib/StatusOverview.svelte";
     import { api } from "../lib/api";
     import { WebSocketManager } from "../lib/websocket";
-    import type { PublicNode, ServerMessage } from "../lib/types";
+    import type { PublicNode, ServerMessage, ServiceStatusOverview } from "../lib/types";
 
     // State
     let loading = $state(true);
@@ -15,54 +15,8 @@
     // Real data for servers
     let servers = $state<PublicNode[]>([]);
 
-    // Mock data for services (保留 mock，因为后端暂时没有 service API)
-    let services = $state([
-        {
-            id: 1,
-            name: "Main Website",
-            url: "https://vespera.io",
-            type: "http",
-            status: "up",
-            uptime: 99.99,
-            latency: 45,
-        },
-        {
-            id: 2,
-            name: "API Gateway",
-            url: "https://api.vespera.io",
-            type: "http",
-            status: "up",
-            uptime: 99.95,
-            latency: 120,
-        },
-        {
-            id: 3,
-            name: "Database Cluster",
-            url: "tcp://db.vespera.io:5432",
-            type: "tcp",
-            status: "up",
-            uptime: 100,
-            latency: 2,
-        },
-        {
-            id: 4,
-            name: "Redis Cache",
-            url: "tcp://redis.vespera.io:6379",
-            type: "tcp",
-            status: "degraded",
-            uptime: 98.5,
-            latency: 15,
-        },
-        {
-            id: 5,
-            name: "Auth Service",
-            url: "https://auth.vespera.io",
-            type: "http",
-            status: "down",
-            uptime: 95.2,
-            latency: 0,
-        },
-    ]);
+    // Real data for services (替换 mock 数据)
+    let services = $state<ServiceStatusOverview[]>([]);
 
     // Derived global stats
     let globalStats = $derived({
@@ -83,6 +37,16 @@
             console.error("Failed to load nodes:", err);
         } finally {
             loading = false;
+        }
+    }
+
+    // 加载服务列表
+    async function loadServices() {
+        try {
+            services = await api.services.getAllOverviews();
+        } catch (err: any) {
+            console.error("Failed to load services:", err);
+            // 不设置全局 error，让服务加载失败不影响整体页面
         }
     }
 
@@ -149,7 +113,13 @@
 
     onMount(() => {
         loadNodes();
+        loadServices();
         initWebSocket();
+
+        // 每 60 秒刷新一次服务状态
+        const serviceInterval = setInterval(loadServices, 60000);
+
+        return () => clearInterval(serviceInterval);
     });
 
     onDestroy(() => {
@@ -176,11 +146,17 @@
                 >
             </h2>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {#each services as service}
-                <ServiceCard {service} />
-            {/each}
-        </div>
+        {#if services.length === 0}
+            <div class="text-center py-8 text-zinc-500 dark:text-zinc-400">
+                No services configured yet.
+            </div>
+        {:else}
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {#each services as overview}
+                    <ServiceCard {overview} />
+                {/each}
+            </div>
+        {/if}
     </section>
 
     <!-- Servers Section -->

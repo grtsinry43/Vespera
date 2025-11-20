@@ -1,6 +1,8 @@
 import type {
   ApiResponse,
   PublicNode,
+  AdminNode,
+  UpdateNodeRequest,
   NodeDetail,
   NodeMetrics,
   MetricsRangeQuery,
@@ -12,7 +14,12 @@ import type {
   ChangePasswordRequest,
   CreateUserRequest,
   UpdateUserRequest,
-  ResetPasswordRequest
+  ResetPasswordRequest,
+  Service,
+  ServiceCreate,
+  ServiceUpdate,
+  ServiceStatusPoint,
+  ServiceStatusOverview
 } from './types';
 
 const API_BASE = '/api/v1';
@@ -77,6 +84,32 @@ export const api = {
         ...(query.limit && { limit: query.limit.toString() }),
       });
       return request<NodeMetrics[]>(`${API_BASE}/nodes/${id}/metrics?${params}`);
+    },
+
+    /**
+     * 管理员：获取所有节点（完整信息）
+     */
+    adminList: async (limit = 20, offset = 0): Promise<AdminNode[]> => {
+      return request<AdminNode[]>(`${API_BASE}/admin/nodes?limit=${limit}&offset=${offset}`);
+    },
+
+    /**
+     * 管理员：更新节点
+     */
+    adminUpdate: async (id: number, req: UpdateNodeRequest): Promise<AdminNode> => {
+      return request<AdminNode>(`${API_BASE}/admin/nodes/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(req),
+      });
+    },
+
+    /**
+     * 管理员：删除节点
+     */
+    adminDelete: async (id: number): Promise<void> => {
+      return request<void>(`${API_BASE}/admin/nodes/${id}`, {
+        method: 'DELETE',
+      });
     },
   },
 
@@ -216,6 +249,73 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(req),
       });
+    },
+  },
+
+  // 服务监控 API
+  services: {
+    /**
+     * 获取所有服务列表
+     */
+    list: async (): Promise<Service[]> => {
+      return request<Service[]>(`${API_BASE}/services`);
+    },
+
+    /**
+     * 获取单个服务详情
+     */
+    get: async (id: number): Promise<Service> => {
+      return request<Service>(`${API_BASE}/services/${id}`);
+    },
+
+    /**
+     * 创建服务（管理员）
+     */
+    create: async (req: ServiceCreate): Promise<Service> => {
+      return request<Service>(`${API_BASE}/services`, {
+        method: 'POST',
+        body: JSON.stringify(req),
+      });
+    },
+
+    /**
+     * 更新服务（管理员）
+     */
+    update: async (id: number, req: ServiceUpdate): Promise<Service> => {
+      return request<Service>(`${API_BASE}/services/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(req),
+      });
+    },
+
+    /**
+     * 删除服务（管理员）
+     */
+    delete: async (id: number): Promise<void> => {
+      return request<void>(`${API_BASE}/services/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    /**
+     * 获取服务状态历史（最近30小时）
+     */
+    getStatusHistory: async (id: number): Promise<ServiceStatusPoint[]> => {
+      return request<ServiceStatusPoint[]>(`${API_BASE}/services/${id}/status`);
+    },
+
+    /**
+     * 获取服务状态概览（服务信息 + 当前状态 + 历史）
+     */
+    getOverview: async (id: number): Promise<ServiceStatusOverview> => {
+      return request<ServiceStatusOverview>(`${API_BASE}/services/${id}/overview`);
+    },
+
+    /**
+     * 获取所有服务状态概览（前端监控面板用）
+     */
+    getAllOverviews: async (): Promise<ServiceStatusOverview[]> => {
+      return request<ServiceStatusOverview[]>(`${API_BASE}/services/all/overview`);
     },
   },
 };

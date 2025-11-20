@@ -2,6 +2,7 @@ pub mod alert_repo;
 pub mod error;
 pub mod models;
 mod repo;
+pub mod service_repo;
 pub mod user_repo;
 
 use error::DbResult;
@@ -9,6 +10,7 @@ use std::sync::Arc;
 
 pub use alert_repo::{AlertRepository, SqliteAlertRepo};
 pub use repo::SqliteRepo;
+pub use service_repo::{ServiceRepository, SqliteServiceRepo};
 pub use user_repo::{UserRepoError, UserRepository};
 
 /// 数据库仓库类型（简化为 Arc<SqliteRepo>）

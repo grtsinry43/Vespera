@@ -1,17 +1,43 @@
 <script lang="ts">
-    let { service } = $props();
+    import type { ServiceStatusOverview } from './types';
 
-    // Mock history data (last 30 checks)
-    // 1 = up, 0 = down, 2 = degraded
-    let history = $state(
-        Array(30)
-            .fill(0)
-            .map(() => {
-                const rand = Math.random();
-                if (service.status === "down") return rand > 0.8 ? 1 : 0;
-                if (service.status === "degraded") return rand > 0.6 ? 1 : 2;
-                return rand > 0.98 ? 0 : rand > 0.95 ? 2 : 1;
-            }),
+    let { overview } = $props<{ overview: ServiceStatusOverview }>();
+
+    // Calculate uptime percentage from history
+    function calculateUptime(history: typeof overview.history): number {
+        const validPoints = history.filter(p => p.status !== 'unknown');
+        if (validPoints.length === 0) return 0;
+
+        const upCount = validPoints.filter(p => p.status === 'up').length;
+        return Number(((upCount / validPoints.length) * 100).toFixed(2));
+    }
+
+    // Calculate average response time
+    function calculateAvgLatency(history: typeof overview.history): number {
+        const validTimes = history
+            .filter(p => p.response_time !== null && p.response_time !== undefined)
+            .map(p => p.response_time!);
+
+        if (validTimes.length === 0) return 0;
+        return Math.round(validTimes.reduce((a, b) => a + b, 0) / validTimes.length);
+    }
+
+    // Convert status to display format (for history bar)
+    // 1 = up, 0 = down, 2 = degraded/timeout/error
+    function statusToNumber(status: typeof overview.current_status): number {
+        if (status === 'up') return 1;
+        if (status === 'down') return 0;
+        return 2; // timeout, error, unknown
+    }
+
+    // Derived values
+    const uptime = $derived(calculateUptime(overview.history));
+    const avgLatency = $derived(calculateAvgLatency(overview.history));
+    const history = $derived(overview.history.map(p => statusToNumber(p.status)));
+    const displayUrl = $derived(
+        overview.service.type === 'http'
+            ? overview.service.target.replace(/^https?:\/\//, '')
+            : overview.service.target
     );
 </script>
 
@@ -22,13 +48,13 @@
         <div class="flex items-center gap-3">
             <div class="relative">
                 <div
-                    class="w-2.5 h-2.5 rounded-full {service.status === 'up'
+                    class="w-2.5 h-2.5 rounded-full {overview.current_status === 'up'
                         ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
-                        : service.status === 'down'
+                        : overview.current_status === 'down'
                           ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]'
                           : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'}"
                 ></div>
-                {#if service.status === "up"}
+                {#if overview.current_status === "up"}
                     <div
                         class="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-20"
                     ></div>
@@ -38,46 +64,54 @@
                 <h3
                     class="font-bold text-sm text-zinc-900 dark:text-white leading-none mb-1"
                 >
-                    {service.name}
+                    {overview.service.name}
                 </h3>
-                <a
-                    href={service.url}
-                    target="_blank"
-                    class="text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors font-mono flex items-center gap-1"
-                >
-                    {service.url.replace(/^https?:\/\//, "")}
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="10"
-                        height="10"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        class="opacity-0 group-hover:opacity-100 transition-opacity"
-                        ><path
-                            d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
-                        /><polyline points="15 3 21 3 21 9" /><line
-                            x1="10"
-                            y1="14"
-                            x2="21"
-                            y2="3"
-                        /></svg
+                {#if overview.service.type === 'http'}
+                    <a
+                        href={overview.service.target}
+                        target="_blank"
+                        class="text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors font-mono flex items-center gap-1"
                     >
-                </a>
+                        {displayUrl}
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="10"
+                            height="10"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            class="opacity-0 group-hover:opacity-100 transition-opacity"
+                            ><path
+                                d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
+                            /><polyline points="15 3 21 3 21 9" /><line
+                                x1="10"
+                                y1="14"
+                                x2="21"
+                                y2="3"
+                            /></svg
+                        >
+                    </a>
+                {:else}
+                    <span
+                        class="text-[10px] text-zinc-400 font-mono"
+                    >
+                        {displayUrl}
+                    </span>
+                {/if}
             </div>
         </div>
         <div class="text-right">
             <div
-                class="text-sm font-bold font-mono {service.status === 'up'
+                class="text-sm font-bold font-mono {overview.current_status === 'up'
                     ? 'text-emerald-600 dark:text-emerald-400'
-                    : service.status === 'down'
+                    : overview.current_status === 'down'
                       ? 'text-rose-600 dark:text-rose-400'
                       : 'text-amber-600 dark:text-amber-400'}"
             >
-                {service.uptime}%
+                {uptime}%
             </div>
             <div
                 class="text-[10px] font-medium text-zinc-400 uppercase tracking-wider"
@@ -107,7 +141,7 @@
             <span
                 class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-zinc-50 dark:bg-zinc-800 text-zinc-500 border border-zinc-100 dark:border-zinc-700/50"
             >
-                {service.type}
+                {overview.service.type}
             </span>
         </div>
         <div
@@ -127,7 +161,7 @@
                     points="12 6 12 12 16 14"
                 /></svg
             >
-            {service.latency}ms
+            {avgLatency > 0 ? `${avgLatency}ms` : 'N/A'}
         </div>
     </div>
 </div>

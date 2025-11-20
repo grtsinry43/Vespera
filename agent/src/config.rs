@@ -42,6 +42,10 @@ pub struct AgentConfig {
     #[serde(default = "default_report_interval")]
     pub report_interval: u64,
 
+    /// 服务检查间隔（秒）
+    #[serde(default = "default_service_check_interval")]
+    pub service_check_interval: u64,
+
     /// 请求超时（秒）
     #[serde(default = "default_timeout")]
     pub timeout: u64,
@@ -63,6 +67,10 @@ pub struct AuthConfig {
 
 fn default_report_interval() -> u64 {
     5
+}
+
+fn default_service_check_interval() -> u64 {
+    300 // 默认 5 分钟检查一次服务
 }
 
 fn default_timeout() -> u64 {
@@ -137,6 +145,11 @@ impl Config {
             .and_then(|s| s.parse().ok())
             .unwrap_or(5);
 
+        let service_check_interval = std::env::var("VESPERA_SERVICE_CHECK_INTERVAL")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(300);
+
         let tags = std::env::var("VESPERA_TAGS")
             .ok()
             .map(|s| s.split(',').map(|t| t.trim().to_string()).collect());
@@ -147,6 +160,7 @@ impl Config {
                 node_name,
                 server_url,
                 report_interval,
+                service_check_interval,
                 timeout: default_timeout(),
                 retry_attempts: default_retry_attempts(),
                 tags,
@@ -215,6 +229,7 @@ impl Default for Config {
                 node_name: "default-node".to_string(),
                 server_url: "http://localhost:3000".to_string(),
                 report_interval: default_report_interval(),
+                service_check_interval: default_service_check_interval(),
                 timeout: default_timeout(),
                 retry_attempts: default_retry_attempts(),
                 tags: None,

@@ -3,8 +3,11 @@ use std::time::Duration;
 use sysinfo::System;
 use tokio::signal;
 use tokio::time::interval;
-use tracing::{error, info};
-use vespera_agent::{collector::{get_local_ip, NodeInfo}, Config, Reporter, SystemCollector};
+use tracing::{error, info, warn};
+use vespera_agent::{
+    collector::{get_local_ip, NodeInfo},
+    Config, Reporter, ServiceChecker, SystemCollector,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -60,16 +63,28 @@ async fn main() -> Result<()> {
         config.agent.retry_attempts,
     );
 
-    // 设置定时器
-    let mut ticker = interval(Duration::from_secs(config.agent.report_interval));
+    // 创建服务检查器 (暂不获取 agent_id，后续可通过首次上报获取)
+    let service_checker = ServiceChecker::new(None);
 
+    // 设置定时器
+    let mut metrics_ticker = interval(Duration::from_secs(config.agent.report_interval));
+    let mut service_ticker = interval(Duration::from_secs(config.agent.service_check_interval));
+
+    // 立即触发第一次 tick（避免等待第一个间隔）
+    metrics_ticker.tick().await;
+    service_ticker.tick().await;
+
+    info!(
+        "Timers configured: metrics_interval={}s, service_check_interval={}s",
+        config.agent.report_interval, config.agent.service_check_interval
+    );
     info!("Agent started successfully, beginning metric collection...");
 
     // 主循环
     loop {
         tokio::select! {
-            _ = ticker.tick() => {
-                // 采集数据
+            _ = metrics_ticker.tick() => {
+                // 采集系统指标数据
                 let request = collector.collect();
 
                 // 上报数据
@@ -84,6 +99,37 @@ async fn main() -> Result<()> {
                     }
                     Err(e) => {
                         error!("Failed to report metrics: {}", e);
+                    }
+                }
+            }
+            _ = service_ticker.tick() => {
+                // 获取需要检查的服务列表
+                match reporter.fetch_services().await {
+                    Ok(services) => {
+                        if !services.is_empty() {
+                            info!("Checking {} services...", services.len());
+
+                            // 执行服务检查
+                            let results = service_checker.check_services(&services).await;
+
+                            // 上报检查结果
+                            match reporter.report_service_status(&results).await {
+                                Ok(_) => {
+                                    let up_count = results.iter().filter(|r| matches!(r.status, vespera_common::ServiceStatus::Up)).count();
+                                    info!(
+                                        "Service checks completed: {}/{} services up",
+                                        up_count,
+                                        results.len()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to report service status: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to fetch services: {}", e);
                     }
                 }
             }

@@ -30,7 +30,7 @@
             loading = true;
             const nodeId = parseInt(params.id, 10);
             const detail = await api.nodes.get(nodeId);
-            server = detail;
+            server = detail.node;
             latestMetrics = detail.latest_metrics || null;
         } catch (err) {
             console.error("Failed to load node detail:", err);
@@ -164,10 +164,9 @@
 
     onMount(async () => {
         await loadNodeDetail();
-        if (server) {
-            await load24hData(); // 默认加载 24h 数据
-            await initWebSocket();
-        }
+        // 只在初始加载时执行一次
+        await load24hData();
+        await initWebSocket();
     });
 
     onDestroy(() => {

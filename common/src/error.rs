@@ -32,6 +32,10 @@ pub enum ServerError {
     #[error("Forbidden: {0}")]
     Forbidden(String),
 
+    /// 冲突（资源已存在）
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     /// 自定义错误
     #[error("{0}")]
     Custom(String),
@@ -47,6 +51,7 @@ impl ServerError {
             ServerError::NotFound(_) => StatusCode::NOT_FOUND,
             ServerError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             ServerError::Forbidden(_) => StatusCode::FORBIDDEN,
+            ServerError::Conflict(_) => StatusCode::CONFLICT,
             ServerError::Custom(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -60,6 +65,7 @@ impl ServerError {
             ServerError::NotFound(_) => 4004,
             ServerError::Unauthorized(_) => 4001,
             ServerError::Forbidden(_) => 4003,
+            ServerError::Conflict(_) => 4009,
             ServerError::Custom(_) => 5999,
         }
     }
