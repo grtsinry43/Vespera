@@ -15,6 +15,7 @@ pub struct PublicNode {
     pub cpu_cores: i64,
     pub total_memory: i64,
     pub last_seen: i64,
+    pub is_public: bool,
     pub tags: Option<Vec<String>>,
     // 最新指标（可选）
     pub cpu_usage: Option<f64>,
@@ -39,6 +40,7 @@ pub struct AdminNode {
     pub last_seen: i64,
     pub created_at: i64,
     pub updated_at: i64,
+    pub is_public: bool,
     pub tags: Option<Vec<String>>,
 }
 
@@ -79,6 +81,13 @@ pub struct DiskMetric {
 pub struct UpdateNodeRequest {
     pub name: Option<String>,
     pub tags: Option<Vec<String>>,
+    pub is_public: Option<bool>,
+}
+
+/// 更新节点可见性请求（管理员）
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateNodeVisibilityRequest {
+    pub is_public: bool,
 }
 
 /// 历史指标查询参数
@@ -108,6 +117,7 @@ mod tests {
             cpu_cores: 8,
             total_memory: 17179869184,
             last_seen: 1234567890,
+            is_public: true,
             tags: Some(vec!["prod".to_string()]),
             cpu_usage: Some(45.5),
             memory_usage: Some(62.3),

@@ -10,7 +10,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use vespera_common::{
     AdminNode, DiskMetric, MetricsRangeQuery, NodeDetail, NodeMetrics, PublicNode,
-    Response as ApiResponse, ServerError, UpdateNodeRequest,
+    Response as ApiResponse, ServerError, UpdateNodeRequest, UpdateNodeVisibilityRequest,
 };
 
 use crate::{
@@ -57,18 +57,26 @@ fn default_limit() -> i64 {
     tag = "节点"
 )]
 pub async fn list_nodes(
-    _auth: OptionalAuthUser,
+    OptionalAuthUser(auth_user): OptionalAuthUser,
     State(state): State<Arc<AppState>>,
     Query(query): Query<PaginationQuery>,
 ) -> Result<Json<ApiResponse<Vec<PublicNode>>>, ServerError> {
     let limit = query.limit.min(100).max(1); // 限制在 1-100 之间
     let offset = query.offset.max(0);
 
-    let nodes = state
-        .db
-        .list_nodes(limit, offset)
-        .await
-        .map_err(|e| ServerError::Internal(format!("Failed to list nodes: {}", e)))?;
+    let nodes = if auth_user.is_some() {
+        state
+            .db
+            .list_nodes(limit, offset)
+            .await
+            .map_err(|e| ServerError::Internal(format!("Failed to list nodes: {}", e)))?
+    } else {
+        state
+            .db
+            .list_public_nodes(limit, offset)
+            .await
+            .map_err(|e| ServerError::Internal(format!("Failed to list nodes: {}", e)))?
+    };
 
     // 转换为公开信息，并附带最新指标
     let mut public_nodes = Vec::with_capacity(nodes.len());
@@ -110,7 +118,7 @@ pub async fn list_nodes(
     tag = "节点"
 )]
 pub async fn get_node(
-    _auth: OptionalAuthUser,
+    OptionalAuthUser(auth_user): OptionalAuthUser,
     State(state): State<Arc<AppState>>,
     Path(node_id): Path<i64>,
 ) -> Result<Json<ApiResponse<NodeDetail<PublicNode>>>, ServerError> {
@@ -121,6 +129,10 @@ pub async fn get_node(
         .await
         .map_err(|e| ServerError::Internal(format!("Failed to get node: {}", e)))?
         .ok_or_else(|| ServerError::NotFound("Node not found".to_string()))?;
+
+    if auth_user.is_none() && !node.is_public {
+        return Err(ServerError::NotFound("Node not found".to_string()));
+    }
 
     // 获取最新指标
     let latest_metrics = state
@@ -160,18 +172,22 @@ pub async fn get_node(
     tag = "节点"
 )]
 pub async fn get_node_metrics(
-    _auth: OptionalAuthUser,
+    OptionalAuthUser(auth_user): OptionalAuthUser,
     State(state): State<Arc<AppState>>,
     Path(node_id): Path<i64>,
     Query(query): Query<MetricsRangeQuery>,
 ) -> Result<Json<ApiResponse<Vec<NodeMetrics>>>, ServerError> {
     // 验证节点是否存在
-    let _node = state
+    let node = state
         .db
         .get_node_by_id(node_id)
         .await
         .map_err(|e| ServerError::Internal(format!("Failed to get node: {}", e)))?
         .ok_or_else(|| ServerError::NotFound("Node not found".to_string()))?;
+
+    if auth_user.is_none() && !node.is_public {
+        return Err(ServerError::NotFound("Node not found".to_string()));
+    }
 
     // 限制查询条数
     let limit = query.limit.min(1000).max(1);
@@ -218,7 +234,7 @@ pub async fn get_node_metrics(
     tag = "节点管理"
 )]
 pub async fn admin_list_nodes(
-    _admin: AdminUser,
+    _auth: AuthUser,
     State(state): State<Arc<AppState>>,
     Query(query): Query<PaginationQuery>,
 ) -> Result<Json<ApiResponse<Vec<AdminNode>>>, ServerError> {
@@ -258,7 +274,7 @@ pub async fn admin_list_nodes(
     tag = "节点管理"
 )]
 pub async fn admin_get_node(
-    _admin: AdminUser,
+    _auth: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(node_id): Path<i64>,
 ) -> Result<Json<ApiResponse<NodeDetail<AdminNode>>>, ServerError> {
@@ -332,6 +348,7 @@ pub async fn admin_update_node(
             node_id,
             req.name.as_deref(),
             tags_json.as_deref(),
+            req.is_public,
         )
         .await
         .map_err(|e| ServerError::Internal(format!("Failed to update node: {}", e)))?;
@@ -343,6 +360,51 @@ pub async fn admin_update_node(
         .await
         .map_err(|e| ServerError::Internal(format!("Failed to get updated node: {}", e)))?
         .ok_or_else(|| ServerError::Internal("Node disappeared after update".to_string()))?;
+
+    Ok(Json(ApiResponse::success(node_to_admin(updated_node))))
+}
+
+/// 更新节点公开状态
+///
+/// PUT /api/v1/admin/nodes/:id/visibility
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/nodes/{id}/visibility",
+    params(
+        ("id" = i64, Path, description = "节点 ID")
+    ),
+    request_body = UpdateNodeVisibilityRequest,
+    responses(
+        (status = 200, description = "更新成功", body = inline(vespera_common::Response<AdminNode>)),
+        (status = 404, description = "节点不存在"),
+        (status = 401, description = "未认证"),
+        (status = 403, description = "权限不足")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "节点管理"
+)]
+pub async fn admin_update_node_visibility(
+    _admin: AdminUser,
+    State(state): State<Arc<AppState>>,
+    Path(node_id): Path<i64>,
+    Json(req): Json<UpdateNodeVisibilityRequest>,
+) -> Result<Json<ApiResponse<AdminNode>>, ServerError> {
+    // 更新节点可见性
+    state
+        .db
+        .update_node(node_id, None, None, Some(req.is_public))
+        .await
+        .map_err(|e| ServerError::Internal(format!("Failed to update node visibility: {}", e)))?;
+
+    // 返回更新后的节点
+    let updated_node = state
+        .db
+        .get_node_by_id(node_id)
+        .await
+        .map_err(|e| ServerError::Internal(format!("Failed to load node: {}", e)))?
+        .ok_or_else(|| ServerError::NotFound("Node not found".to_string()))?;
 
     Ok(Json(ApiResponse::success(node_to_admin(updated_node))))
 }
@@ -406,6 +468,7 @@ fn node_to_public(node: Node) -> PublicNode {
         cpu_cores: node.cpu_cores,
         total_memory: node.total_memory,
         last_seen: node.last_seen,
+        is_public: node.is_public,
         tags: node.tags.and_then(|json| serde_json::from_str(&json).ok()),
         // 这些字段在后面会被填充
         cpu_usage: None,
@@ -431,6 +494,7 @@ fn node_to_admin(node: Node) -> AdminNode {
         last_seen: node.last_seen,
         created_at: node.created_at,
         updated_at: node.updated_at,
+        is_public: node.is_public,
         tags: node.tags.and_then(|json| serde_json::from_str(&json).ok()),
     }
 }
@@ -544,6 +608,7 @@ mod tests {
             last_seen: 1234567890,
             created_at: 1234567890,
             updated_at: 1234567890,
+            is_public: true,
             tags: Some(r#"["prod"]"#.to_string()),
         };
 

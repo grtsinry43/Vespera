@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 
 /// 服务类型
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceType {
     Http,
@@ -27,7 +28,7 @@ impl ServiceType {
 }
 
 /// 服务状态
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceStatus {
     Up,
@@ -61,7 +62,7 @@ impl ServiceStatus {
 }
 
 /// 服务配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Service {
     pub id: i64,
     pub node_id: Option<i64>,
@@ -76,12 +77,13 @@ pub struct Service {
     pub expected_body: Option<String>,
     pub headers: Option<HashMap<String, String>>,
     pub enabled: bool,
+    pub is_public: bool,
     pub created_at: i64,
     pub updated_at: i64,
 }
 
 /// 创建服务请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceCreate {
     pub node_id: Option<i64>,
     pub name: String,
@@ -100,10 +102,12 @@ pub struct ServiceCreate {
     pub headers: Option<HashMap<String, String>>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    #[serde(default = "default_is_public")]
+    pub is_public: bool,
 }
 
 /// 更新服务请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceUpdate {
     pub name: Option<String>,
     pub target: Option<String>,
@@ -114,10 +118,17 @@ pub struct ServiceUpdate {
     pub expected_body: Option<String>,
     pub headers: Option<HashMap<String, String>>,
     pub enabled: Option<bool>,
+    pub is_public: Option<bool>,
+}
+
+/// 更新服务可见性请求（管理员）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateServiceVisibilityRequest {
+    pub is_public: bool,
 }
 
 /// 服务检查结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceCheckResult {
     pub service_id: i64,
     pub agent_id: Option<i64>,
@@ -129,7 +140,7 @@ pub struct ServiceCheckResult {
 }
 
 /// 服务状态历史记录
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceStatusRecord {
     pub id: i64,
     pub service_id: i64,
@@ -142,7 +153,7 @@ pub struct ServiceStatusRecord {
 }
 
 /// 服务状态概览（包含最近30个数据点）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceStatusOverview {
     pub service: Service,
     pub current_status: ServiceStatus,
@@ -150,7 +161,7 @@ pub struct ServiceStatusOverview {
 }
 
 /// 服务状态数据点（用于前端图表）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ServiceStatusPoint {
     pub timestamp: i64,
     pub status: ServiceStatus,
@@ -176,4 +187,8 @@ fn default_expected_code() -> i64 {
 
 fn default_enabled() -> bool {
     true
+}
+
+fn default_is_public() -> bool {
+    false
 }

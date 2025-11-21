@@ -12,6 +12,10 @@ export default defineConfig({
         changeOrigin: true,
         ws: true, // 同时支持 WebSocket 代理（/api/v1/ws）
       },
+      '/health': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
 })

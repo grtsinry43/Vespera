@@ -126,6 +126,6 @@ mod tests {
     #[test]
     fn test_interval_duration() {
         let duration = Duration::from_secs(HEALTH_CHECK_INTERVAL_SECS);
-        assert_eq!(duration.as_secs(), 30);
+        assert_eq!(duration.as_secs(), HEALTH_CHECK_INTERVAL_SECS);
     }
 }

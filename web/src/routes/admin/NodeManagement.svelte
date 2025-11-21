@@ -3,11 +3,15 @@
     import AdminLayout from "../../lib/admin/AdminLayout.svelte";
     import NodeModal from "../../lib/admin/NodeModal.svelte";
     import { api } from "../../lib/api";
+    import { authStore } from "../../lib/authStore";
     import type { AdminNode } from "../../lib/types";
 
     let nodes = $state<AdminNode[]>([]);
     let loading = $state(true);
     let error = $state<string | null>(null);
+
+    // Check if user is admin
+    const isAdmin = $derived($authStore.user?.role === 'admin');
 
     // Modal state
     let showModal = $state(false);
@@ -45,6 +49,16 @@
     function handleEdit(node: AdminNode) {
         editingNode = node;
         showModal = true;
+    }
+
+    async function handleToggleVisibility(node: AdminNode) {
+        try {
+            await api.nodes.adminUpdate(node.id, { is_public: !node.is_public });
+            await loadNodes();
+        } catch (e) {
+            console.error("Failed to toggle visibility:", e);
+            alert("Failed to toggle visibility");
+        }
     }
 
     async function handleDelete(node: AdminNode) {
@@ -165,9 +179,15 @@
                                 >Last Seen</th
                             >
                             <th
+                                class="py-4 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wider"
+                                >Visibility</th
+                            >
+                            {#if isAdmin}
+                            <th
                                 class="py-4 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wider text-right"
                                 >Actions</th
                             >
+                            {/if}
                         </tr>
                     </thead>
                     <tbody
@@ -229,6 +249,42 @@
                                     class="py-4 px-4 text-sm text-zinc-500 dark:text-zinc-400"
                                     >{getTimeSince(node.last_seen)}</td
                                 >
+                                <td class="py-4 px-4">
+                                    {#if isAdmin}
+                                    <button
+                                        on:click={() => handleToggleVisibility(node)}
+                                        class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-colors
+                                        {node.is_public
+                                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-500/20'
+                                            : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}"
+                                        title={node.is_public ? "Click to make private" : "Click to make public"}
+                                    >
+                                        {#if node.is_public}
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                            Public
+                                        {:else}
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                            Private
+                                        {/if}
+                                    </button>
+                                    {:else}
+                                    <span
+                                        class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium
+                                        {node.is_public
+                                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                                            : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'}"
+                                    >
+                                        {#if node.is_public}
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                            Public
+                                        {:else}
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                            Private
+                                        {/if}
+                                    </span>
+                                    {/if}
+                                </td>
+                                {#if isAdmin}
                                 <td class="py-4 px-4 text-right">
                                     <div class="flex items-center justify-end gap-2">
                                         <button
@@ -286,6 +342,7 @@
                                         </button>
                                     </div>
                                 </td>
+                                {/if}
                             </tr>
                         {/each}
                     </tbody>

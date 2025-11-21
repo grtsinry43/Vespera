@@ -17,6 +17,7 @@ pub struct Node {
     pub last_seen: i64,         // unix timestamp
     pub created_at: i64,
     pub updated_at: i64,
+    pub is_public: bool,
     pub tags: Option<String>,   // JSON array
 }
 
@@ -31,6 +32,7 @@ pub struct NodeCreate {
     pub os_version: Option<String>,
     pub cpu_cores: i64,
     pub total_memory: i64,
+    pub is_public: bool,
     pub tags: Option<Vec<String>>,
 }
 
@@ -166,4 +168,3 @@ pub struct UserNodePermission {
     pub can_manage: bool,
     pub created_at: i64,
 }
-

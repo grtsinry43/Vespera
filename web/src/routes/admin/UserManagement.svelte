@@ -211,9 +211,12 @@
                                 </td>
                                 <td class="py-4 px-4">
                                     <span
-                                        class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                                        class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium
+                                        {user.role === 'admin'
+                                            ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400'
+                                            : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'}"
                                     >
-                                        {user.is_admin ? "Administrator" : "User"}
+                                        {user.role === 'admin' ? "Administrator" : "User"}
                                     </span>
                                 </td>
                                 <td class="py-4 px-4">

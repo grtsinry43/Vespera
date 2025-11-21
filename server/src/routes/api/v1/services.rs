@@ -9,7 +9,7 @@ use axum::{
 use std::sync::Arc;
 use vespera_common::{
     Response as ApiResponse, ServerError, Service, ServiceCheckResult, ServiceCreate,
-    ServiceStatusOverview, ServiceStatusPoint, ServiceUpdate,
+    ServiceStatusOverview, ServiceStatusPoint, ServiceUpdate, UpdateServiceVisibilityRequest,
 };
 
 use crate::{
@@ -49,17 +49,21 @@ pub async fn create_service(
 ///
 /// GET /api/v1/services
 ///
-/// **权限**: 需要认证（普通用户可查看）
+/// **权限**: 未登录仅返回公开服务，登录后返回全部
 pub async fn list_services(
-    _auth: OptionalAuthUser,
+    OptionalAuthUser(auth_user): OptionalAuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ApiResponse<Vec<Service>>>, ServerError> {
-    let services = state
-        .db
-        .services()
-        .list_services()
-        .await
-        .map_err(|e| ServerError::Internal(e.to_string()))?;
+    let repo = state.db.services();
+    let services = if auth_user.is_some() {
+        repo.list_services()
+            .await
+            .map_err(|e| ServerError::Internal(e.to_string()))?
+    } else {
+        repo.list_public_services()
+            .await
+            .map_err(|e| ServerError::Internal(e.to_string()))?
+    };
 
     Ok(Json(ApiResponse::success(services)))
 }
@@ -68,9 +72,9 @@ pub async fn list_services(
 ///
 /// GET /api/v1/services/:id
 ///
-/// **权限**: 需要认证
+/// **权限**: 未登录仅可访问公开服务
 pub async fn get_service(
-    _auth: OptionalAuthUser,
+    OptionalAuthUser(auth_user): OptionalAuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Result<Json<ApiResponse<Service>>, ServerError> {
@@ -81,6 +85,10 @@ pub async fn get_service(
         .await
         .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Service not found".to_string()))?;
+
+    if auth_user.is_none() && !service.is_public {
+        return Err(ServerError::NotFound("Service not found".to_string()));
+    }
 
     Ok(Json(ApiResponse::success(service)))
 }
@@ -100,6 +108,59 @@ pub async fn update_service(
         .db
         .services()
         .update_service(id, &payload)
+        .await
+        .map_err(|e| match e {
+            DbError::NotFound => ServerError::NotFound("Service not found".to_string()),
+            _ => ServerError::Internal(e.to_string()),
+        })?;
+
+    Ok(Json(ApiResponse::success(service)))
+}
+
+/// 更新服务公开状态
+///
+/// PUT /api/v1/services/:id/visibility
+#[utoipa::path(
+    put,
+    path = "/api/v1/services/{id}/visibility",
+    params(
+        ("id" = i64, Path, description = "服务 ID")
+    ),
+    request_body = UpdateServiceVisibilityRequest,
+    responses(
+        (status = 200, description = "更新成功", body = inline(vespera_common::Response<vespera_common::Service>)),
+        (status = 404, description = "服务不存在"),
+        (status = 401, description = "未认证"),
+        (status = 403, description = "权限不足")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "服务"
+)]
+pub async fn update_service_visibility(
+    _admin: AdminUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(req): Json<UpdateServiceVisibilityRequest>,
+) -> Result<Json<ApiResponse<Service>>, ServerError> {
+    let update = ServiceUpdate {
+        name: None,
+        target: None,
+        check_interval: None,
+        timeout: None,
+        method: None,
+        expected_code: None,
+        expected_body: None,
+        headers: None,
+        enabled: None,
+        is_public: Some(req.is_public),
+    };
+
+    let service = state
+        .db
+        .services()
+        .update_service(id, &update)
         .await
         .map_err(|e| match e {
             DbError::NotFound => ServerError::NotFound("Service not found".to_string()),
@@ -140,20 +201,24 @@ pub async fn delete_service(
 ///
 /// GET /api/v1/services/:id/status
 ///
-/// **权限**: 需要认证
+/// **权限**: 未登录仅可访问公开服务
 pub async fn get_service_status(
-    _auth: OptionalAuthUser,
+    OptionalAuthUser(auth_user): OptionalAuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Result<Json<ApiResponse<Vec<ServiceStatusPoint>>>, ServerError> {
     // 先检查服务是否存在
-    let _service = state
+    let service = state
         .db
         .services()
         .get_service(id)
         .await
         .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Service not found".to_string()))?;
+
+    if auth_user.is_none() && !service.is_public {
+        return Err(ServerError::NotFound("Service not found".to_string()));
+    }
 
     let history = state
         .db
@@ -169,9 +234,9 @@ pub async fn get_service_status(
 ///
 /// GET /api/v1/services/:id/overview
 ///
-/// **权限**: 公开接口
+/// **权限**: 未登录仅可访问公开服务
 pub async fn get_service_overview(
-    _auth: OptionalAuthUser,
+    OptionalAuthUser(auth_user): OptionalAuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Result<Json<ApiResponse<ServiceStatusOverview>>, ServerError> {
@@ -182,6 +247,10 @@ pub async fn get_service_overview(
         .await
         .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Service not found".to_string()))?;
+
+    if auth_user.is_none() && !service.is_public {
+        return Err(ServerError::NotFound("Service not found".to_string()));
+    }
 
     let history = state
         .db
@@ -213,18 +282,22 @@ pub async fn get_service_overview(
 ///
 /// GET /api/v1/services/all/overview
 ///
-/// **权限**: 公开接口，适合前端监控面板展示
+/// **权限**: 未登录仅返回公开服务
 pub async fn get_all_services_overview(
-    _auth: OptionalAuthUser,
+    OptionalAuthUser(auth_user): OptionalAuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ApiResponse<Vec<ServiceStatusOverview>>>, ServerError> {
-    // 获取所有服务
-    let services = state
-        .db
-        .services()
-        .list_services()
-        .await
-        .map_err(|e| ServerError::Internal(e.to_string()))?;
+    let repo = state.db.services();
+    // 根据认证状态选择公开或全部服务
+    let services = if auth_user.is_some() {
+        repo.list_services()
+            .await
+            .map_err(|e| ServerError::Internal(e.to_string()))?
+    } else {
+        repo.list_public_services()
+            .await
+            .map_err(|e| ServerError::Internal(e.to_string()))?
+    };
 
     let mut overviews = Vec::new();
 

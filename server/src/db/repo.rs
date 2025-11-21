@@ -92,6 +92,7 @@ impl SqliteRepo {
                    last_seen as "last_seen!: i64",
                    created_at as "created_at!: i64",
                    updated_at as "updated_at!: i64",
+                   is_public as "is_public!: bool",
                    tags
             FROM nodes
             WHERE uuid = ?
@@ -118,6 +119,7 @@ impl SqliteRepo {
                    last_seen as "last_seen!: i64",
                    created_at as "created_at!: i64",
                    updated_at as "updated_at!: i64",
+                   is_public as "is_public!: bool",
                    tags
             FROM nodes
             WHERE id = ?
@@ -137,9 +139,12 @@ impl SqliteRepo {
 
         let result = sqlx::query!(
             r#"
-            INSERT INTO nodes (uuid, name, ip_address, agent_version, os_type, os_version,
-                              cpu_cores, total_memory, status, last_seen, created_at, updated_at, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?, ?, ?)
+            INSERT INTO nodes (
+                uuid, name, ip_address, agent_version, os_type, os_version,
+                cpu_cores, total_memory, status, last_seen, created_at, updated_at,
+                is_public, tags
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?, ?, ?, ?)
             "#,
             node.uuid,
             node.name,
@@ -152,6 +157,7 @@ impl SqliteRepo {
             now,
             now,
             now,
+            node.is_public,
             tags_json
         )
         .execute(&self.pool)
@@ -199,6 +205,7 @@ impl SqliteRepo {
                    last_seen as "last_seen!: i64",
                    created_at as "created_at!: i64",
                    updated_at as "updated_at!: i64",
+                   is_public as "is_public!: bool",
                    tags
             FROM nodes
             ORDER BY created_at DESC
@@ -213,8 +220,44 @@ impl SqliteRepo {
         Ok(nodes)
     }
 
-    /// 更新节点信息（名称和标签）
-    pub async fn update_node(&self, id: i64, name: Option<&str>, tags: Option<&str>) -> DbResult<()> {
+    /// 列出公开节点(分页)
+    pub async fn list_public_nodes(&self, limit: i64, offset: i64) -> DbResult<Vec<Node>> {
+        let nodes = sqlx::query_as!(
+            Node,
+            r#"
+            SELECT id as "id!: i64",
+                   uuid, name, ip_address, agent_version, os_type,
+                   os_version,
+                   cpu_cores as "cpu_cores!: i64",
+                   total_memory as "total_memory!: i64",
+                   status,
+                   last_seen as "last_seen!: i64",
+                   created_at as "created_at!: i64",
+                   updated_at as "updated_at!: i64",
+                   is_public as "is_public!: bool",
+                   tags
+            FROM nodes
+            WHERE is_public = 1
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            "#,
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(nodes)
+    }
+
+    /// 更新节点信息（名称、标签、公开性）
+    pub async fn update_node(
+        &self,
+        id: i64,
+        name: Option<&str>,
+        tags: Option<&str>,
+        is_public: Option<bool>,
+    ) -> DbResult<()> {
         let now = chrono::Utc::now().timestamp();
 
         if let Some(node_name) = name {
@@ -240,6 +283,21 @@ impl SqliteRepo {
                 WHERE id = ?
                 "#,
                 tags_json,
+                now,
+                id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        if let Some(is_public_value) = is_public {
+            sqlx::query!(
+                r#"
+                UPDATE nodes
+                SET is_public = ?, updated_at = ?
+                WHERE id = ?
+                "#,
+                is_public_value,
                 now,
                 id
             )
@@ -294,6 +352,7 @@ impl SqliteRepo {
                    last_seen as "last_seen!: i64",
                    created_at as "created_at!: i64",
                    updated_at as "updated_at!: i64",
+                   is_public as "is_public!: bool",
                    tags
             FROM nodes
             WHERE status = 'online' AND last_seen < ?

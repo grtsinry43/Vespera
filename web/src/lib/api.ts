@@ -19,7 +19,8 @@ import type {
   ServiceCreate,
   ServiceUpdate,
   ServiceStatusPoint,
-  ServiceStatusOverview
+  ServiceStatusOverview,
+  HealthCheckData
 } from './types';
 
 const API_BASE = '/api/v1';
@@ -58,6 +59,16 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // 系统健康检查
+  system: {
+    /**
+     * 获取系统健康状态（包含版本和运行时长）
+     */
+    health: async (): Promise<HealthCheckData> => {
+      return request<HealthCheckData>('/health');
+    },
+  },
+
   // 节点相关 API
   nodes: {
     /**

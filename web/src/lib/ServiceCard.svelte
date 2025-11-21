@@ -61,11 +61,29 @@
                 {/if}
             </div>
             <div>
-                <h3
-                    class="font-bold text-sm text-zinc-900 dark:text-white leading-none mb-1"
-                >
-                    {overview.service.name}
-                </h3>
+                <div class="flex items-center gap-1.5">
+                    <h3
+                        class="font-bold text-sm text-zinc-900 dark:text-white leading-none"
+                    >
+                        {overview.service.name}
+                    </h3>
+                    {#if !overview.service.is_public}
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="11"
+                            height="11"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            class="text-zinc-400/70 dark:text-zinc-500/70 shrink-0"
+                            title="Private (team only)"
+                            ><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg
+                        >
+                    {/if}
+                </div>
                 {#if overview.service.type === 'http'}
                     <a
                         href={overview.service.target}

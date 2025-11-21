@@ -16,6 +16,9 @@ pub trait ServiceRepository: Send + Sync {
     /// 获取所有服务
     async fn list_services(&self) -> DbResult<Vec<Service>>;
 
+    /// 获取公开服务
+    async fn list_public_services(&self) -> DbResult<Vec<Service>>;
+
     /// 获取启用的服务
     async fn list_enabled_services(&self) -> DbResult<Vec<Service>>;
 
@@ -84,8 +87,8 @@ impl ServiceRepository for SqliteServiceRepo {
             INSERT INTO services (
                 node_id, name, type, target, check_interval, timeout,
                 method, expected_code, expected_body, headers, enabled,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_public, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#
         )
@@ -100,6 +103,7 @@ impl ServiceRepository for SqliteServiceRepo {
         .bind(&service.expected_body)
         .bind(headers_json)
         .bind(service.enabled)
+        .bind(service.is_public)
         .bind(now)
         .bind(now)
         .fetch_one(&self.pool)
@@ -109,15 +113,15 @@ impl ServiceRepository for SqliteServiceRepo {
     }
 
     async fn get_service(&self, id: i64) -> DbResult<Option<Service>> {
-        let row = sqlx::query_as::<_, (i64, Option<i64>, String, String, String, i64, i64, String, i64, Option<String>, Option<String>, bool, i64, i64)>(
-            "SELECT id, node_id, name, type, target, check_interval, timeout, method, expected_code, expected_body, headers, enabled, created_at, updated_at FROM services WHERE id = ?"
+        let row = sqlx::query_as::<_, (i64, Option<i64>, String, String, String, i64, i64, String, i64, Option<String>, Option<String>, bool, bool, i64, i64)>(
+            "SELECT id, node_id, name, type, target, check_interval, timeout, method, expected_code, expected_body, headers, enabled, is_public, created_at, updated_at FROM services WHERE id = ?"
         )
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
 
         match row {
-            Some((id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, created_at, updated_at)) => {
+            Some((id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)) => {
                 let service_type = ServiceType::from_str(&service_type_str)
                     .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
                 let headers = Self::deserialize_headers(headers_json.as_deref())?;
@@ -135,6 +139,7 @@ impl ServiceRepository for SqliteServiceRepo {
                     expected_body,
                     headers,
                     enabled,
+                    is_public,
                     created_at,
                     updated_at,
                 }))
@@ -144,14 +149,14 @@ impl ServiceRepository for SqliteServiceRepo {
     }
 
     async fn list_services(&self) -> DbResult<Vec<Service>> {
-        let rows = sqlx::query_as::<_, (i64, Option<i64>, String, String, String, i64, i64, String, i64, Option<String>, Option<String>, bool, i64, i64)>(
-            "SELECT id, node_id, name, type, target, check_interval, timeout, method, expected_code, expected_body, headers, enabled, created_at, updated_at FROM services ORDER BY created_at DESC"
+        let rows = sqlx::query_as::<_, (i64, Option<i64>, String, String, String, i64, i64, String, i64, Option<String>, Option<String>, bool, bool, i64, i64)>(
+            "SELECT id, node_id, name, type, target, check_interval, timeout, method, expected_code, expected_body, headers, enabled, is_public, created_at, updated_at FROM services ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await?;
 
         rows.into_iter()
-            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, created_at, updated_at)| {
+            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)| {
                 let service_type = ServiceType::from_str(&service_type_str)
                     .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
                 let headers = Self::deserialize_headers(headers_json.as_deref())?;
@@ -169,6 +174,41 @@ impl ServiceRepository for SqliteServiceRepo {
                     expected_body,
                     headers,
                     enabled,
+                    is_public,
+                    created_at,
+                    updated_at,
+                })
+            })
+            .collect()
+    }
+
+    async fn list_public_services(&self) -> DbResult<Vec<Service>> {
+        let rows = sqlx::query_as::<_, (i64, Option<i64>, String, String, String, i64, i64, String, i64, Option<String>, Option<String>, bool, bool, i64, i64)>(
+            "SELECT id, node_id, name, type, target, check_interval, timeout, method, expected_code, expected_body, headers, enabled, is_public, created_at, updated_at FROM services WHERE is_public = 1 ORDER BY created_at DESC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)| {
+                let service_type = ServiceType::from_str(&service_type_str)
+                    .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
+                let headers = Self::deserialize_headers(headers_json.as_deref())?;
+
+                Ok(Service {
+                    id,
+                    node_id,
+                    name,
+                    service_type,
+                    target,
+                    check_interval,
+                    timeout,
+                    method,
+                    expected_code,
+                    expected_body,
+                    headers,
+                    enabled,
+                    is_public,
                     created_at,
                     updated_at,
                 })
@@ -177,14 +217,14 @@ impl ServiceRepository for SqliteServiceRepo {
     }
 
     async fn list_enabled_services(&self) -> DbResult<Vec<Service>> {
-        let rows = sqlx::query_as::<_, (i64, Option<i64>, String, String, String, i64, i64, String, i64, Option<String>, Option<String>, bool, i64, i64)>(
-            "SELECT id, node_id, name, type, target, check_interval, timeout, method, expected_code, expected_body, headers, enabled, created_at, updated_at FROM services WHERE enabled = 1 ORDER BY created_at DESC"
+        let rows = sqlx::query_as::<_, (i64, Option<i64>, String, String, String, i64, i64, String, i64, Option<String>, Option<String>, bool, bool, i64, i64)>(
+            "SELECT id, node_id, name, type, target, check_interval, timeout, method, expected_code, expected_body, headers, enabled, is_public, created_at, updated_at FROM services WHERE enabled = 1 ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await?;
 
         rows.into_iter()
-            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, created_at, updated_at)| {
+            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)| {
                 let service_type = ServiceType::from_str(&service_type_str)
                     .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
                 let headers = Self::deserialize_headers(headers_json.as_deref())?;
@@ -202,6 +242,7 @@ impl ServiceRepository for SqliteServiceRepo {
                     expected_body,
                     headers,
                     enabled,
+                    is_public,
                     created_at,
                     updated_at,
                 })
@@ -210,15 +251,15 @@ impl ServiceRepository for SqliteServiceRepo {
     }
 
     async fn list_services_by_node(&self, node_id: i64) -> DbResult<Vec<Service>> {
-        let rows = sqlx::query_as::<_, (i64, Option<i64>, String, String, String, i64, i64, String, i64, Option<String>, Option<String>, bool, i64, i64)>(
-            "SELECT id, node_id, name, type, target, check_interval, timeout, method, expected_code, expected_body, headers, enabled, created_at, updated_at FROM services WHERE node_id = ? ORDER BY created_at DESC"
+        let rows = sqlx::query_as::<_, (i64, Option<i64>, String, String, String, i64, i64, String, i64, Option<String>, Option<String>, bool, bool, i64, i64)>(
+            "SELECT id, node_id, name, type, target, check_interval, timeout, method, expected_code, expected_body, headers, enabled, is_public, created_at, updated_at FROM services WHERE node_id = ? ORDER BY created_at DESC"
         )
         .bind(node_id)
         .fetch_all(&self.pool)
         .await?;
 
         rows.into_iter()
-            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, created_at, updated_at)| {
+            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)| {
                 let service_type = ServiceType::from_str(&service_type_str)
                     .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
                 let headers = Self::deserialize_headers(headers_json.as_deref())?;
@@ -236,6 +277,7 @@ impl ServiceRepository for SqliteServiceRepo {
                     expected_body,
                     headers,
                     enabled,
+                    is_public,
                     created_at,
                     updated_at,
                 })
@@ -259,6 +301,7 @@ impl ServiceRepository for SqliteServiceRepo {
         let expected_body = update.expected_body.as_ref().or(current.expected_body.as_ref());
         let headers = update.headers.as_ref().or(current.headers.as_ref());
         let enabled = update.enabled.unwrap_or(current.enabled);
+        let is_public = update.is_public.unwrap_or(current.is_public);
 
         let headers_json = Self::serialize_headers(&headers.cloned())?;
 
@@ -267,7 +310,7 @@ impl ServiceRepository for SqliteServiceRepo {
             UPDATE services
             SET name = ?, target = ?, check_interval = ?, timeout = ?,
                 method = ?, expected_code = ?, expected_body = ?, headers = ?,
-                enabled = ?, updated_at = ?
+                enabled = ?, is_public = ?, updated_at = ?
             WHERE id = ?
             "#
         )
@@ -280,6 +323,7 @@ impl ServiceRepository for SqliteServiceRepo {
         .bind(expected_body)
         .bind(headers_json)
         .bind(enabled)
+        .bind(is_public)
         .bind(now)
         .bind(id)
         .execute(&self.pool)

@@ -43,7 +43,7 @@ pub async fn report_handler(
     // 1. 检查节点是否存在
     let node = state.db.get_node_by_uuid(&uuid_str).await?;
 
-    let (node_id, node_name, is_new_node) = match node {
+    let (node_id, node_name, node_is_public, is_new_node) = match node {
         Some(existing_node) => {
             // 节点已存在：更新 last_seen
             tracing::debug!(
@@ -61,7 +61,12 @@ pub async fn report_handler(
                 )
                 .await?;
 
-            (existing_node.id, existing_node.name, false)
+            (
+                existing_node.id,
+                existing_node.name,
+                existing_node.is_public,
+                false,
+            )
         }
         None => {
             // 首次上报：创建新节点
@@ -81,11 +86,17 @@ pub async fn report_handler(
                 os_version: req.os_version.clone(),
                 cpu_cores: req.cpu_cores,
                 total_memory: req.total_memory,
+                is_public: false,
                 tags: req.tags.clone(),
             };
 
             let created_node = state.db.create_node(&node_create).await?;
-            (created_node.id, created_node.name, true)
+            (
+                created_node.id,
+                created_node.name,
+                created_node.is_public,
+                true,
+            )
         }
     };
 
@@ -140,6 +151,7 @@ pub async fn report_handler(
             last_seen: req.metrics.timestamp,
             created_at: chrono::Utc::now().timestamp(),
             updated_at: chrono::Utc::now().timestamp(),
+            is_public: node_is_public,
             tags: tags_json,
         };
 

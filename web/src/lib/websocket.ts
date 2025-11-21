@@ -1,4 +1,5 @@
 import type { ServerMessage, ClientMessage, MetricsUpdate } from './types';
+import { wsStore } from './wsStore';
 
 export type MessageHandler = (message: ServerMessage) => void;
 
@@ -34,6 +35,7 @@ export class WebSocketManager {
    * 连接 WebSocket
    */
   connect(): Promise<void> {
+    wsStore.setConnecting();
     return new Promise((resolve, reject) => {
       try {
         this.ws = new WebSocket(this.url);
@@ -41,6 +43,7 @@ export class WebSocketManager {
         this.ws.onopen = () => {
           console.log('[WS] Connected');
           this.reconnectAttempts = 0;
+          wsStore.setConnected(false);
 
           // 发送认证消息
           this.send({
@@ -58,6 +61,7 @@ export class WebSocketManager {
             clearTimeout(authTimeout);
             if (message.type === 'auth_success') {
               this.authenticated = true;
+              wsStore.setAuthenticated(true);
               console.log('[WS] Authenticated');
               // 重新订阅节点
               if (this.subscribedNodes.size > 0) {
@@ -68,6 +72,7 @@ export class WebSocketManager {
               console.warn('[WS] Auth failed, continuing in anonymous mode');
               // 认证失败但继续连接（匿名模式）
               this.authenticated = false;
+              wsStore.setAuthenticated(false);
               resolve(); // 不要 reject，继续使用匿名模式
             }
           };
@@ -100,6 +105,7 @@ export class WebSocketManager {
         this.ws.onclose = () => {
           console.log('[WS] Disconnected');
           this.authenticated = false;
+          wsStore.setDisconnected();
           this.attemptReconnect();
         };
       } catch (err) {
@@ -194,6 +200,7 @@ export class WebSocketManager {
 
     this.authenticated = false;
     this.handlers.clear();
+    wsStore.setDisconnected();
   }
 
   /**

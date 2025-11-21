@@ -1,5 +1,7 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import { authStore } from "../lib/authStore";
+    import { api } from "../lib/api";
     import { fade, fly, slide } from "svelte/transition";
     import { cubicOut } from "svelte/easing";
     import { push } from "svelte-spa-router";
@@ -10,6 +12,16 @@
     let email = $state("");
     let error = $state<string | null>(null);
     let loading = $state(false);
+    let version = $state("--");
+
+    onMount(async () => {
+        try {
+            const health = await api.system.health();
+            version = health.version;
+        } catch (e) {
+            console.error("Failed to fetch version:", e);
+        }
+    });
 
     async function handleSubmit() {
         if (!username || !password) {
@@ -196,7 +208,7 @@
                 <span
                     class="text-[10px] text-zinc-400 dark:text-zinc-600 uppercase tracking-widest"
                 >
-                    Vespera Sys v1.0
+                    Vespera LightMonitor v{version}
                 </span>
                 <button
                     onclick={switchMode}

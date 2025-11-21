@@ -1,34 +1,46 @@
 <script lang="ts">
     import { link, location } from "svelte-spa-router";
     import ThemeToggle from "../ThemeToggle.svelte";
+    import { authStore } from "../authStore";
+
+    // Check if user is admin
+    const isAdmin = $derived($authStore.user?.role === 'admin');
 
     const navItems = [
         {
             href: "/admin",
             label: "Overview",
             icon: "M3 3v18h18V3H3zm8 16H5v-6h6v6zm0-8H5V5h6v6zm8 8h-6v-6h6v6zm0-8h-6V5h6v6z",
+            adminOnly: false,
         },
         {
             href: "/admin/nodes",
             label: "Nodes",
             icon: "M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z",
+            adminOnly: false,
         },
         {
             href: "/admin/services",
             label: "Services",
             icon: "M11.99 18.54l-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27-7.38 5.74zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27L12 16z",
-        }, // Filled Layers Icon
+            adminOnly: false,
+        },
         {
             href: "/admin/users",
             label: "Users",
             icon: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
+            adminOnly: true,
         },
         {
             href: "/admin/settings",
             label: "Settings",
             icon: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0 .59-.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
+            adminOnly: true,
         },
     ];
+
+    // Filter nav items based on user role
+    const visibleNavItems = $derived(navItems.filter(item => !item.adminOnly || isAdmin));
 
     function isActive(path: string) {
         if (path === "/admin") {
@@ -64,7 +76,7 @@
         </div>
 
         <nav class="flex-1 p-4 space-y-1">
-            {#each navItems as item}
+            {#each visibleNavItems as item}
                 <a
                     href={item.href}
                     use:link
@@ -125,18 +137,18 @@
                 <div
                     class="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-xs font-medium text-zinc-600 dark:text-zinc-300"
                 >
-                    AD
+                    {$authStore.user?.username?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <div class="flex-1 min-w-0">
                     <p
                         class="text-sm font-medium text-zinc-900 dark:text-white truncate"
                     >
-                        Admin User
+                        {$authStore.user?.username || 'User'}
                     </p>
                     <p
                         class="text-xs text-zinc-500 dark:text-zinc-400 truncate"
                     >
-                        admin@vespera.app
+                        {$authStore.user?.role === 'admin' ? 'Administrator' : 'Team Member'}
                     </p>
                 </div>
             </div>

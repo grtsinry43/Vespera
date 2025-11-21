@@ -18,6 +18,7 @@ export interface PublicNode {
   cpu_cores: number;
   total_memory: number;
   last_seen: number;
+  is_public: boolean;
   tags?: string[];
   // 前端扩展字段 - 用于显示实时指标
   cpu_usage?: number;
@@ -202,12 +203,18 @@ export interface AdminNode {
   last_seen: number;
   created_at: number;
   updated_at: number;
+  is_public: boolean;
   tags?: string[];
 }
 
 export interface UpdateNodeRequest {
   name?: string;
   tags?: string[];
+  is_public?: boolean;
+}
+
+export interface UpdateNodeVisibilityRequest {
+  is_public: boolean;
 }
 
 // ==================== 服务监控相关 ====================
@@ -232,6 +239,7 @@ export interface Service {
   expected_body?: string;
   headers?: Record<string, string>;
   enabled: boolean;
+  is_public: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -263,6 +271,7 @@ export interface ServiceCreate {
   expected_body?: string;
   headers?: Record<string, string>;
   enabled?: boolean;
+  is_public?: boolean;
 }
 
 // 更新服务请求
@@ -276,4 +285,17 @@ export interface ServiceUpdate {
   expected_body?: string;
   headers?: Record<string, string>;
   enabled?: boolean;
+  is_public?: boolean;
+}
+
+export interface UpdateServiceVisibilityRequest {
+  is_public: boolean;
+}
+
+// ==================== 系统健康检查 ====================
+
+export interface HealthCheckData {
+  status: string;
+  uptime_secs: number;
+  version: string;
 }

@@ -119,6 +119,10 @@ pub fn create_app(db: DbRepo) -> Router {
             get(routes::api::v1::nodes::admin_get_node)
                 .put(routes::api::v1::nodes::admin_update_node)
                 .delete(routes::api::v1::nodes::admin_delete_node),
+        )
+        .route(
+            "/admin/nodes/{id}/visibility",
+            put(routes::api::v1::nodes::admin_update_node_visibility),
         );
 
     // 服务监控路由
@@ -137,6 +141,10 @@ pub fn create_app(db: DbRepo) -> Router {
             get(routes::api::v1::services::get_service)
                 .put(routes::api::v1::services::update_service)
                 .delete(routes::api::v1::services::delete_service),
+        )
+        .route(
+            "/services/{id}/visibility",
+            put(routes::api::v1::services::update_service_visibility),
         )
         .route(
             "/services/{id}/status",
