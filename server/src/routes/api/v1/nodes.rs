@@ -18,7 +18,7 @@ use crate::{
         error::DbError,
         models::{Metric, Node},
     },
-    middleware::auth::{AdminUser, AuthUser, OptionalAuthUser},
+    middleware::auth::{AdminUser, OptionalAuthUser},
     state::AppState,
 };
 
@@ -234,7 +234,7 @@ pub async fn get_node_metrics(
     tag = "节点管理"
 )]
 pub async fn admin_list_nodes(
-    _auth: AuthUser,
+    _admin: AdminUser,
     State(state): State<Arc<AppState>>,
     Query(query): Query<PaginationQuery>,
 ) -> Result<Json<ApiResponse<Vec<AdminNode>>>, ServerError> {
@@ -274,7 +274,7 @@ pub async fn admin_list_nodes(
     tag = "节点管理"
 )]
 pub async fn admin_get_node(
-    _auth: AuthUser,
+    _admin: AdminUser,
     State(state): State<Arc<AppState>>,
     Path(node_id): Path<i64>,
 ) -> Result<Json<ApiResponse<NodeDetail<AdminNode>>>, ServerError> {

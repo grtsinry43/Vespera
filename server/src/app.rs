@@ -1,4 +1,5 @@
 use axum::{
+    http::{HeaderValue, Method},
     middleware,
     routing::{delete, get, post, put},
     Router,
@@ -31,10 +32,25 @@ pub fn create_app(db: DbRepo) -> Router {
     // 启动数据清理后台任务
     crate::cleanup::spawn_cleanup_task(state.clone());
 
-    // 配置 CORS(允许所有来源,生产环境需要限制)
+    // 配置 CORS（默认仅允许本地开发源，生产环境通过环境变量显式配置）
+    let allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .filter_map(|origin| HeaderValue::from_str(origin.trim()).ok())
+                .collect::<Vec<_>>()
+        })
+        .filter(|origins| !origins.is_empty())
+        .unwrap_or_else(|| {
+            vec![
+                HeaderValue::from_static("http://localhost:5173"),
+                HeaderValue::from_static("http://127.0.0.1:5173"),
+            ]
+        });
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
+        .allow_origin(allowed_origins)
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
         .allow_headers(Any);
 
     // Agent 上报端点 (需要鉴权)

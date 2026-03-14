@@ -1,4 +1,5 @@
 import type { ServerMessage, ClientMessage, MetricsUpdate } from './types';
+import { authStorage } from './authStorage';
 import { wsStore } from './wsStore';
 
 export type MessageHandler = (message: ServerMessage) => void;
@@ -48,11 +49,12 @@ export class WebSocketManager {
           // 发送认证消息
           this.send({
             type: 'auth',
-            token: this.token,
+            token: authStorage.getAccessToken() ?? this.token,
           });
 
           // 等待认证结果（但即使失败也继续，因为后端支持匿名访问）
           const authTimeout = setTimeout(() => {
+            this.removeHandler(handleAuth);
             console.log('[WS] Auth timeout, continuing in anonymous mode');
             resolve(); // 超时也算成功，继续以匿名模式运行
           }, 5000);
@@ -60,6 +62,7 @@ export class WebSocketManager {
           const handleAuth = (message: ServerMessage) => {
             clearTimeout(authTimeout);
             if (message.type === 'auth_success') {
+              this.removeHandler(handleAuth);
               this.authenticated = true;
               wsStore.setAuthenticated(true);
               console.log('[WS] Authenticated');
@@ -69,6 +72,7 @@ export class WebSocketManager {
               }
               resolve();
             } else if (message.type === 'auth_failed') {
+              this.removeHandler(handleAuth);
               console.warn('[WS] Auth failed, continuing in anonymous mode');
               // 认证失败但继续连接（匿名模式）
               this.authenticated = false;

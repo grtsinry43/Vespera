@@ -184,6 +184,7 @@ export interface AlertData {
   alert_type: string;
   severity: string;
   message: string;
+  is_public: boolean;
   triggered_at: number;
 }
 

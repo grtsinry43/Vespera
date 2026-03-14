@@ -21,10 +21,25 @@ pub type DbRepo = Arc<SqliteRepo>;
 /// 使用 SQLite 嵌入式数据库，零依赖部署
 ///
 /// # 环境变量
+/// - `DATABASE_URL`: 完整 SQLite 连接串（优先）
 /// - `SQLITE_PATH`: SQLite 数据库文件路径（默认: monitor.db）
 pub async fn init_db() -> DbResult<DbRepo> {
-    let sqlite_path = std::env::var("SQLITE_PATH").unwrap_or_else(|_| "monitor.db".to_string());
-    let sqlite_url = format!("sqlite:{}?mode=rwc", sqlite_path);
+    let (sqlite_path, sqlite_url) = match std::env::var("DATABASE_URL") {
+        Ok(url) => {
+            let path = url
+                .trim_start_matches("sqlite:///")
+                .trim_start_matches("sqlite://")
+                .trim_start_matches("sqlite:")
+                .trim_end_matches("?mode=rwc")
+                .to_string();
+            (path, url)
+        }
+        Err(_) => {
+            let path = std::env::var("SQLITE_PATH").unwrap_or_else(|_| "monitor.db".to_string());
+            let url = format!("sqlite:{}?mode=rwc", path);
+            (path, url)
+        }
+    };
 
     tracing::info!("Initializing SQLite database...");
 

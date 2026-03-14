@@ -4,6 +4,7 @@
     import ServiceCard from "../lib/ServiceCard.svelte";
     import StatusOverview from "../lib/StatusOverview.svelte";
     import { api } from "../lib/api";
+    import { authStorage } from "../lib/authStorage";
     import { WebSocketManager } from "../lib/websocket";
     import { wsStore } from "../lib/wsStore";
     import type { PublicNode, ServerMessage, ServiceStatusOverview, HealthCheckData } from "../lib/types";
@@ -78,7 +79,7 @@
 
     // 初始化 WebSocket
     async function initWebSocket() {
-        const token = localStorage.getItem("token");
+        const token = authStorage.getAccessToken();
         if (!token) {
             console.warn("No token found, skipping WebSocket connection");
             return;

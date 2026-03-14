@@ -42,8 +42,14 @@ docker run -d \
 # 安装依赖
 cargo build
 
-# 运行 Server
-cargo run --bin vespera-server
+# 准备 Server 环境
+cp server/.env.example server/.env
+
+# 初始化数据库并检查 Server
+bash scripts/server-dev.sh check
+
+# 初始化数据库并运行 Server
+bash scripts/server-dev.sh run
 
 # 运行 Agent
 cp agent.toml.example agent.toml
@@ -74,6 +80,20 @@ secret = "your-secret-key"
 - `VESPERA_SERVER_URL` - Server 地址
 - `VESPERA_SECRET` - 认证密钥
 - `VESPERA_REPORT_INTERVAL` - 上报间隔（秒）
+
+### Server 配置
+
+- `JWT_SECRET` - JWT 签名密钥，必填
+- `AGENT_REGISTRATION_TOKEN` - Agent 上报认证密钥，必填
+- `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` - 首次启动创建管理员
+- `SQLITE_PATH` 或 `DATABASE_URL` - SQLite 数据库位置
+- `BIND_ADDRESS` 或 `SERVER_HOST` + `SERVER_PORT` - 监听地址
+
+### Server 启动脚本
+
+- `bash scripts/server-dev.sh bootstrap` - 初始化/修复本地开发数据库与 `_sqlx_migrations`
+- `bash scripts/server-dev.sh check` - 用当前 `server/.env` 完成 DB bootstrap 并执行 `cargo check`
+- `bash scripts/server-dev.sh run` - 用当前 `server/.env` 完成 DB bootstrap 并启动服务
 
 ## 性能指标
 

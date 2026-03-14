@@ -50,6 +50,9 @@ async fn main() -> Result<()> {
     );
     tracing::info!("================================================");
 
+    crate::utils::jwt_secret_from_env()
+        .map_err(|e| anyhow::anyhow!("Server configuration error: {}", e))?;
+
     // 初始化数据库
     let db_repo = init_db().await?;
 
@@ -95,7 +98,11 @@ async fn main() -> Result<()> {
     }
 
     // 获取绑定地址（从环境变量或默认值）
-    let bind_addr = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
+    let bind_addr = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| {
+        let host = std::env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+        let port = std::env::var("SERVER_PORT").unwrap_or_else(|_| "3000".to_string());
+        format!("{}:{}", host, port)
+    });
 
     tracing::info!("Starting server on {}", bind_addr);
 

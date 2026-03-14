@@ -188,10 +188,10 @@ where
             .ok_or_else(|| AppError::Unauthorized("Invalid Authorization format".to_string()))?;
 
         // 3. 获取 JWT secret (从环境变量)
-        let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-            tracing::warn!("JWT_SECRET not set, using default");
-            "change-this-secret-key-at-least-32-characters-long".to_string()
-        });
+        let jwt_secret = crate::utils::jwt_secret_from_env().map_err(|e| {
+            tracing::error!("JWT secret unavailable: {}", e);
+            AppError::Internal(e.to_string())
+        })?;
 
         // 4. 验证 JWT
         let claims = crate::utils::verify_jwt(token, &jwt_secret).map_err(|e| {

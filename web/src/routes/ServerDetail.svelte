@@ -2,6 +2,7 @@
     import { onMount, onDestroy } from "svelte";
     import { pop } from "svelte-spa-router";
     import { api } from "../lib/api";
+    import { authStorage } from "../lib/authStorage";
     import { WebSocketManager } from "../lib/websocket";
     import MetricsChart from "../lib/MetricsChart.svelte";
     import type { PublicNode, NodeMetrics, ServerMessage } from "../lib/types";
@@ -69,7 +70,7 @@
 
     // 初始化 WebSocket
     async function initWebSocket() {
-        const token = localStorage.getItem("token");
+        const token = authStorage.getAccessToken();
         if (!token || !server) {
             console.warn("No token or server found, skipping WebSocket connection");
             return;
@@ -360,9 +361,9 @@
             </button>
             <button
                 onclick={() =>
-                    server.status !== "offline" && switchMode("realtime")}
-                disabled={server.status === "offline"}
-                class="px-4 py-2 text-xs font-medium rounded-lg transition-all duration-200 {server.status ===
+                    server?.status !== "offline" && switchMode("realtime")}
+                disabled={server?.status === "offline"}
+                class="px-4 py-2 text-xs font-medium rounded-lg transition-all duration-200 {server?.status ===
                 'offline'
                     ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50'
                     : chartMode === 'realtime'
@@ -370,7 +371,7 @@
                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}"
             >
                 <span class="flex items-center gap-1.5">
-                    {#if server.status !== "offline"}
+                    {#if server?.status !== "offline"}
                         <span class="relative flex h-2 w-2">
                             <span
                                 class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
@@ -380,7 +381,7 @@
                             ></span>
                         </span>
                     {/if}
-                    {server.status === "offline" ? "Unavailable" : "Realtime"}
+                    {server?.status === "offline" ? "Unavailable" : "Realtime"}
                 </span>
             </button>
         </div>

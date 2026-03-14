@@ -15,7 +15,7 @@ use vespera_common::{
 use crate::{
     db::UserRepoError,
     middleware::auth::AuthUser,
-    utils::{create_jwt, hash_password, verify_password},
+    utils::{create_jwt, hash_password, jwt_secret_from_env, verify_password},
 };
 
 use crate::state::AppState;
@@ -89,8 +89,8 @@ pub async fn register(
         })?;
 
     // 5. 创建 JWT
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "change-this-secret-key-at-least-32-characters-long".to_string());
+    let jwt_secret = jwt_secret_from_env()
+        .map_err(|e| ServerError::Internal(format!("JWT configuration failed: {}", e)))?;
 
     let access_token = create_jwt(
         db_user.id,
@@ -171,8 +171,8 @@ pub async fn login(
     }
 
     // 4. 创建 JWT
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "change-this-secret-key-at-least-32-characters-long".to_string());
+    let jwt_secret = jwt_secret_from_env()
+        .map_err(|e| ServerError::Internal(format!("JWT configuration failed: {}", e)))?;
 
     let access_token = create_jwt(
         db_user.id,
@@ -245,8 +245,8 @@ pub async fn refresh(
     }
 
     // 4. 创建新的 JWT
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "change-this-secret-key-at-least-32-characters-long".to_string());
+    let jwt_secret = jwt_secret_from_env()
+        .map_err(|e| ServerError::Internal(format!("JWT configuration failed: {}", e)))?;
 
     let access_token = create_jwt(
         db_user.id,
@@ -257,18 +257,30 @@ pub async fn refresh(
     )
     .map_err(|e| ServerError::Internal(format!("JWT creation failed: {}", e)))?;
 
-    // 5. 更新 Refresh Token 最后使用时间
+    // 5. 进行 refresh token rotation
+    let new_refresh_token = generate_refresh_token();
     db.users()
-        .update_refresh_token_last_used(refresh_token_record.id)
+        .create_refresh_token(db_user.id, &new_refresh_token, 30, None)
         .await
         .map_err(|e| ServerError::Internal(e.to_string()))?;
 
-    // 6. 返回响应 (不做 token rotation)
+    db.users()
+        .delete_refresh_token_by_id(refresh_token_record.id)
+        .await
+        .map_err(|e| ServerError::Internal(e.to_string()))?;
+
+    // 6. 更新新 Refresh Token 最后使用时间
+    db.users()
+        .update_refresh_token_last_used_for_user(db_user.id, &new_refresh_token)
+        .await
+        .map_err(|e| ServerError::Internal(e.to_string()))?;
+
+    // 7. 返回响应
     let expires_at = (Utc::now() + chrono::Duration::days(7)).timestamp();
 
     Ok(Json(ApiResponse::success(RefreshTokenResponse {
         access_token,
-        refresh_token: None, // 不进行 token rotation
+        refresh_token: Some(new_refresh_token),
         expires_at,
     })))
 }
@@ -294,9 +306,21 @@ pub async fn logout(
     Json(req): Json<RefreshTokenRequest>,
 ) -> Result<Json<ApiResponse<()>>, ServerError> {
     let db = &state.db;
+    let refresh_token_record = db
+        .users()
+        .verify_refresh_token(&req.refresh_token)
+        .await
+        .map_err(|_| ServerError::Unauthorized("Invalid or expired refresh token".to_string()))?;
+
+    if refresh_token_record.user_id != auth.id {
+        return Err(ServerError::Forbidden(
+            "Cannot revoke another user's refresh token".to_string(),
+        ));
+    }
+
     // 删除 Refresh Token
     db.users()
-        .delete_refresh_token(&req.refresh_token)
+        .delete_refresh_token_by_id(refresh_token_record.id)
         .await
         .map_err(|e| ServerError::Internal(e.to_string()))?;
 

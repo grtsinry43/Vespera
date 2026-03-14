@@ -10,8 +10,15 @@
 
     let loading = $state(false);
 
+    type UserFormData = {
+        username: string;
+        password: string;
+        email: string;
+        is_admin: boolean;
+    };
+
     // Form data
-    let formData = $state<CreateUserRequest | UpdateUserRequest>({
+    let formData = $state<UserFormData>({
         username: "",
         password: "",
         email: "",
@@ -24,8 +31,10 @@
             if (user) {
                 // Edit mode
                 formData = {
-                    email: user.email,
-                    is_admin: user.is_admin,
+                    username: user.username,
+                    password: "",
+                    email: user.email ?? "",
+                    is_admin: user.role === "admin",
                 };
             } else {
                 // Create mode
@@ -44,10 +53,20 @@
         try {
             if (user) {
                 // Update
-                await api.users.update(user.id, formData as UpdateUserRequest);
+                const request: UpdateUserRequest = {
+                    email: formData.email || undefined,
+                    role: formData.is_admin ? "admin" : "user",
+                };
+                await api.users.update(user.id, request);
             } else {
                 // Create
-                await api.users.create(formData as CreateUserRequest);
+                const request: CreateUserRequest = {
+                    username: formData.username,
+                    password: formData.password,
+                    email: formData.email || undefined,
+                    role: formData.is_admin ? "admin" : "user",
+                };
+                await api.users.create(request);
             }
             dispatch("save");
             show = false;

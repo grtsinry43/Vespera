@@ -11,6 +11,12 @@ import { wrap } from "svelte-spa-router/wrap";
 import { isAuthenticated, authStore } from "./authStore";
 import { get } from "svelte/store";
 
+const guardedRoute = (component: any, conditions: Array<() => boolean>) =>
+    wrap({
+        component,
+        conditions,
+    }) as any;
+
 // 路由守卫：检查是否已登录
 const requireAuth = () => {
     if (!get(isAuthenticated)) {
@@ -31,29 +37,14 @@ const requireAdmin = () => {
     return true;
 };
 
-export const routes = {
-    '/': Dashboard,
-    '/login': Login,
-    '/servers/:id': ServerDetail,
-    '/admin': wrap({
-        component: AdminPanel,
-        conditions: [requireAuth]
-    }),
-    '/admin/nodes': wrap({
-        component: NodeManagement,
-        conditions: [requireAuth]
-    }),
-    '/admin/services': wrap({
-        component: ServiceManagement,
-        conditions: [requireAuth]
-    }),
-    '/admin/users': wrap({
-        component: UserManagement,
-        conditions: [requireAdmin]
-    }),
-    '/admin/settings': wrap({
-        component: Settings,
-        conditions: [requireAdmin]
-    }),
-    '*': NotFound
+export const routes: Record<string, any> = {
+    '/': Dashboard as any,
+    '/login': Login as any,
+    '/servers/:id': ServerDetail as any,
+    '/admin': guardedRoute(AdminPanel as any, [requireAuth]),
+    '/admin/nodes': guardedRoute(NodeManagement as any, [requireAuth]),
+    '/admin/services': guardedRoute(ServiceManagement as any, [requireAuth]),
+    '/admin/users': guardedRoute(UserManagement as any, [requireAdmin]),
+    '/admin/settings': guardedRoute(Settings as any, [requireAdmin]),
+    '*': NotFound as any
 };

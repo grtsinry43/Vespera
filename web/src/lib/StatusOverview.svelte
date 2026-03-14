@@ -1,8 +1,14 @@
 <script lang="ts">
+    type Incident = {
+        title: string;
+        time: string;
+        description: string;
+    };
+
     let { globalStats } = $props();
 
     // Mock incident data
-    let activeIncidents = $state([
+    let activeIncidents = $state<Incident[]>([
         // {
         //     title: "PureFlow KMP API Server 500 错误",
         //     time: "Detected 7m ago",

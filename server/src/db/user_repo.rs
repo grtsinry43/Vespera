@@ -366,6 +366,31 @@ impl UserRepository {
         Ok(())
     }
 
+    /// 根据 token 明文更新 Refresh Token 最后使用时间
+    pub async fn update_refresh_token_last_used_for_user(
+        &self,
+        user_id: i64,
+        token: &str,
+    ) -> Result<(), UserRepoError> {
+        let token_hash = format!("{:x}", Sha256::digest(token.as_bytes()));
+        let now = Utc::now().timestamp();
+
+        sqlx::query!(
+            r#"
+            UPDATE refresh_tokens
+            SET last_used_at = ?
+            WHERE user_id = ? AND token_hash = ?
+            "#,
+            now,
+            user_id,
+            token_hash
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// 删除用户的所有 Refresh Token (登出/修改密码时使用)
     pub async fn delete_user_refresh_tokens(&self, user_id: i64) -> Result<(), UserRepoError> {
         sqlx::query!(
@@ -391,6 +416,21 @@ impl UserRepository {
             WHERE token_hash = ?
             "#,
             token_hash
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// 根据主键删除 Refresh Token
+    pub async fn delete_refresh_token_by_id(&self, token_id: i64) -> Result<(), UserRepoError> {
+        sqlx::query!(
+            r#"
+            DELETE FROM refresh_tokens
+            WHERE id = ?
+            "#,
+            token_id
         )
         .execute(&self.pool)
         .await?;

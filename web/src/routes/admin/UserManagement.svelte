@@ -14,7 +14,7 @@
     let editingUser = $state<User | null>(null);
 
     // Get time since last login
-    function getTimeSince(timestamp: number | null): string {
+    function getTimeSince(timestamp: number | null | undefined): string {
         if (!timestamp) return "Never";
         const now = Math.floor(Date.now() / 1000);
         const diff = now - timestamp;

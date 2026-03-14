@@ -37,6 +37,9 @@ pub enum JwtError {
     #[error("Failed to create JWT")]
     CreateError,
 
+    #[error("JWT_SECRET environment variable is required")]
+    MissingSecret,
+
     #[error("Invalid JWT")]
     InvalidToken,
 
@@ -45,6 +48,11 @@ pub enum JwtError {
 
     #[error("Invalid JWT signature")]
     InvalidSignature,
+}
+
+/// 从环境变量加载 JWT 密钥
+pub fn jwt_secret_from_env() -> Result<String, JwtError> {
+    std::env::var("JWT_SECRET").map_err(|_| JwtError::MissingSecret)
 }
 
 /// 创建 JWT

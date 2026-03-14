@@ -134,6 +134,9 @@ pub struct AlertData {
     /// 告警消息
     pub message: String,
 
+    /// 所属节点是否公开
+    pub is_public: bool,
+
     /// 触发时间
     pub triggered_at: i64,
 }

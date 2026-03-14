@@ -106,6 +106,7 @@ impl AlertEngine {
                             triggered_at: chrono::Utc::now().timestamp(),
                             resolved_at: None,
                             metadata: Some(serde_json::json!({
+                                "node_is_public": node.is_public,
                                 "cpu_usage": metrics.cpu_usage,
                                 "threshold": threshold_percent
                             })),
@@ -136,6 +137,7 @@ impl AlertEngine {
                             triggered_at: chrono::Utc::now().timestamp(),
                             resolved_at: None,
                             metadata: Some(serde_json::json!({
+                                "node_is_public": node.is_public,
                                 "memory_usage": metrics.memory_usage,
                                 "threshold": threshold_percent
                             })),
@@ -168,6 +170,7 @@ impl AlertEngine {
                             triggered_at: chrono::Utc::now().timestamp(),
                             resolved_at: None,
                             metadata: Some(serde_json::json!({
+                                "node_is_public": node.is_public,
                                 "mount": disk.mount,
                                 "usage": disk.usage,
                                 "threshold": threshold_percent

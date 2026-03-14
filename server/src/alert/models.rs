@@ -158,6 +158,13 @@ pub struct Alert {
 impl Alert {
     /// 转换为 WebSocket 消息格式
     pub fn to_ws_message(&self) -> vespera_common::AlertData {
+        let is_public = self
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("node_is_public"))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+
         vespera_common::AlertData {
             alert_id: self.id.unwrap_or(0),
             node_id: self.node_id,
@@ -165,6 +172,7 @@ impl Alert {
             level: self.severity.as_str().to_string(),
             alert_type: self.alert_type.as_str().to_string(),
             message: self.message.clone(),
+            is_public,
             triggered_at: self.triggered_at,
         }
     }

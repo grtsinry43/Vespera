@@ -77,8 +77,8 @@
                             stroke-linecap="round"
                             stroke-linejoin="round"
                             class="text-zinc-400/70 dark:text-zinc-500/70 shrink-0"
-                            title="Private (team only)"
-                            ><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg
+                            aria-label="Private node"
+                            ><title>Private (team only)</title><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg
                         >
                     {/if}
                 </div>

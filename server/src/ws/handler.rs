@@ -235,10 +235,19 @@ async fn try_authenticate(
     };
 
     // 验证 JWT
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-        tracing::warn!("JWT_SECRET not set, using default");
-        "change-this-secret-key-at-least-32-characters-long".to_string()
-    });
+    let jwt_secret = match crate::utils::jwt_secret_from_env() {
+        Ok(secret) => secret,
+        Err(e) => {
+            tracing::error!("WebSocket JWT secret unavailable: {}", e);
+            let error_msg = ServerMessage::AuthFailed {
+                message: "Server authentication configuration error".to_string(),
+            };
+            if let Ok(json) = serde_json::to_string(&error_msg) {
+                let _ = sender.send(Message::Text(json.into())).await;
+            }
+            return None;
+        }
+    };
 
     let claims = match crate::utils::verify_jwt(&token, &jwt_secret) {
         Ok(c) => c,
@@ -349,7 +358,9 @@ impl WsSession {
                 self.subscribed_nodes.contains(node_id)
             }
             ServerMessage::Alert(alert) => {
-                // 告警信息，所有用户都可以接收（公开信息）
+                if !self.is_authenticated() && !alert.is_public {
+                    return false;
+                }
                 if self.subscribed_nodes.is_empty() {
                     return true;
                 }
@@ -412,10 +423,8 @@ async fn handle_client_message(
             }
 
             // 验证 JWT
-            let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-                tracing::warn!("JWT_SECRET not set, using default");
-                "change-this-secret-key-at-least-32-characters-long".to_string()
-            });
+            let jwt_secret = crate::utils::jwt_secret_from_env()
+                .map_err(|_| WsError::InvalidMessage)?;
 
             match crate::utils::verify_jwt(&token, &jwt_secret) {
                 Ok(claims) => {

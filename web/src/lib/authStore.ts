@@ -1,6 +1,7 @@
 import { writable, derived } from 'svelte/store';
 import type { User } from './types';
 import { api } from './api';
+import { authStorage } from './authStorage';
 
 // 认证状态
 interface AuthState {
@@ -22,7 +23,7 @@ function createAuthStore() {
 
     // 初始化：检查登录状态
     async init() {
-      const token = localStorage.getItem('token');
+      const token = authStorage.getAccessToken();
       if (!token) {
         set({ user: null, loading: false, error: null });
         return;
@@ -41,8 +42,7 @@ function createAuthStore() {
           set({ user, loading: false, error: null });
         } catch (refreshError) {
           // 刷新失败，清除认证
-          localStorage.removeItem('token');
-          localStorage.removeItem('refresh_token');
+          authStorage.clear();
           set({ user: null, loading: false, error: null });
         }
       }

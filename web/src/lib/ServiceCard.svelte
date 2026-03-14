@@ -1,30 +1,30 @@
 <script lang="ts">
-    import type { ServiceStatusOverview } from './types';
+    import type { ServiceStatusOverview, ServiceStatusPoint, ServiceStatus } from './types';
 
     let { overview } = $props<{ overview: ServiceStatusOverview }>();
 
     // Calculate uptime percentage from history
-    function calculateUptime(history: typeof overview.history): number {
-        const validPoints = history.filter(p => p.status !== 'unknown');
+    function calculateUptime(history: ServiceStatusPoint[]): number {
+        const validPoints = history.filter((point: ServiceStatusPoint) => point.status !== 'unknown');
         if (validPoints.length === 0) return 0;
 
-        const upCount = validPoints.filter(p => p.status === 'up').length;
+        const upCount = validPoints.filter((point: ServiceStatusPoint) => point.status === 'up').length;
         return Number(((upCount / validPoints.length) * 100).toFixed(2));
     }
 
     // Calculate average response time
-    function calculateAvgLatency(history: typeof overview.history): number {
+    function calculateAvgLatency(history: ServiceStatusPoint[]): number {
         const validTimes = history
-            .filter(p => p.response_time !== null && p.response_time !== undefined)
-            .map(p => p.response_time!);
+            .filter((point: ServiceStatusPoint) => point.response_time !== null && point.response_time !== undefined)
+            .map((point: ServiceStatusPoint) => point.response_time!);
 
         if (validTimes.length === 0) return 0;
-        return Math.round(validTimes.reduce((a, b) => a + b, 0) / validTimes.length);
+        return Math.round(validTimes.reduce((left: number, right: number) => left + right, 0) / validTimes.length);
     }
 
     // Convert status to display format (for history bar)
     // 1 = up, 0 = down, 2 = degraded/timeout/error
-    function statusToNumber(status: typeof overview.current_status): number {
+    function statusToNumber(status: ServiceStatus): number {
         if (status === 'up') return 1;
         if (status === 'down') return 0;
         return 2; // timeout, error, unknown
@@ -33,7 +33,7 @@
     // Derived values
     const uptime = $derived(calculateUptime(overview.history));
     const avgLatency = $derived(calculateAvgLatency(overview.history));
-    const history = $derived(overview.history.map(p => statusToNumber(p.status)));
+    const history = $derived(overview.history.map((point: ServiceStatusPoint) => statusToNumber(point.status)));
     const displayUrl = $derived(
         overview.service.type === 'http'
             ? overview.service.target.replace(/^https?:\/\//, '')
@@ -79,8 +79,8 @@
                             stroke-linecap="round"
                             stroke-linejoin="round"
                             class="text-zinc-400/70 dark:text-zinc-500/70 shrink-0"
-                            title="Private (team only)"
-                            ><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg
+                            aria-label="Private service"
+                            ><title>Private (team only)</title><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg
                         >
                     {/if}
                 </div>

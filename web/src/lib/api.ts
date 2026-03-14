@@ -22,6 +22,7 @@ import type {
   ServiceStatusOverview,
   HealthCheckData
 } from './types';
+import { authStorage } from './authStorage';
 
 const API_BASE = '/api/v1';
 
@@ -33,15 +34,13 @@ class ApiError extends Error {
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('token');
+  const token = authStorage.getAccessToken();
 
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...options?.headers,
-  };
+  const headers = new Headers(options?.headers);
+  headers.set('Content-Type', 'application/json');
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.set('Authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(url, {
@@ -134,9 +133,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
-      // 保存 token 到 localStorage
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('refresh_token', data.refresh_token);
+      authStorage.setTokens(data.access_token, data.refresh_token);
       return data;
     },
 
@@ -148,9 +145,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(req),
       });
-      // 保存 token 到 localStorage
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('refresh_token', data.refresh_token);
+      authStorage.setTokens(data.access_token, data.refresh_token);
       return data;
     },
 
@@ -158,7 +153,7 @@ export const api = {
      * 登出
      */
     logout: async (): Promise<void> => {
-      const refreshToken = localStorage.getItem('refresh_token');
+      const refreshToken = authStorage.getRefreshToken();
       if (refreshToken) {
         try {
           await request<void>(`${API_BASE}/auth/logout`, {
@@ -170,8 +165,7 @@ export const api = {
         }
       }
       // 清除本地存储
-      localStorage.removeItem('token');
-      localStorage.removeItem('refresh_token');
+      authStorage.clear();
     },
 
     /**
@@ -195,15 +189,19 @@ export const api = {
      * 刷新 Token
      */
     refreshToken: async (): Promise<void> => {
-      const refreshToken = localStorage.getItem('refresh_token');
+      const refreshToken = authStorage.getRefreshToken();
       if (!refreshToken) {
         throw new Error('No refresh token available');
       }
-      const data = await request<{ access_token: string; expires_at: number }>(`${API_BASE}/auth/refresh`, {
+      const data = await request<{ access_token: string; refresh_token?: string; expires_at: number }>(`${API_BASE}/auth/refresh`, {
         method: 'POST',
         body: JSON.stringify({ refresh_token: refreshToken }),
       });
-      localStorage.setItem('token', data.access_token);
+      if (data.refresh_token) {
+        authStorage.setTokens(data.access_token, data.refresh_token);
+      } else {
+        authStorage.setAccessToken(data.access_token);
+      }
     },
   },
 
