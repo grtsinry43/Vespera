@@ -1,6 +1,9 @@
 use sqlx::{Pool, Sqlite};
-use vespera_common::{Service, ServiceCheckResult, ServiceCreate, ServiceStatus, ServiceStatusPoint, ServiceStatusRecord, ServiceType, ServiceUpdate};
 use std::collections::HashMap;
+use vespera_common::{
+    Service, ServiceCheckResult, ServiceCreate, ServiceStatus, ServiceStatusPoint,
+    ServiceStatusRecord, ServiceType, ServiceUpdate,
+};
 
 use super::error::{DbError, DbResult};
 
@@ -60,8 +63,9 @@ impl SqliteServiceRepo {
     /// 将 headers HashMap 序列化为 JSON
     fn serialize_headers(headers: &Option<HashMap<String, String>>) -> DbResult<Option<String>> {
         match headers {
-            Some(h) => Ok(Some(serde_json::to_string(h)
-                .map_err(|e| DbError::SerializationError(e.to_string()))?)),
+            Some(h) => Ok(Some(
+                serde_json::to_string(h).map_err(|e| DbError::SerializationError(e.to_string()))?,
+            )),
             None => Ok(None),
         }
     }
@@ -69,8 +73,9 @@ impl SqliteServiceRepo {
     /// 从 JSON 反序列化 headers
     fn deserialize_headers(json: Option<&str>) -> DbResult<Option<HashMap<String, String>>> {
         match json {
-            Some(j) => Ok(Some(serde_json::from_str(j)
-                .map_err(|e| DbError::SerializationError(e.to_string()))?)),
+            Some(j) => Ok(Some(
+                serde_json::from_str(j).map_err(|e| DbError::SerializationError(e.to_string()))?,
+            )),
             None => Ok(None),
         }
     }
@@ -90,7 +95,7 @@ impl ServiceRepository for SqliteServiceRepo {
                 is_public, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
-            "#
+            "#,
         )
         .bind(service.node_id)
         .bind(&service.name)
@@ -121,9 +126,29 @@ impl ServiceRepository for SqliteServiceRepo {
         .await?;
 
         match row {
-            Some((id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)) => {
-                let service_type = ServiceType::from_str(&service_type_str)
-                    .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
+            Some((
+                id,
+                node_id,
+                name,
+                service_type_str,
+                target,
+                check_interval,
+                timeout,
+                method,
+                expected_code,
+                expected_body,
+                headers_json,
+                enabled,
+                is_public,
+                created_at,
+                updated_at,
+            )) => {
+                let service_type = ServiceType::from_str(&service_type_str).ok_or_else(|| {
+                    DbError::SerializationError(format!(
+                        "Invalid service type: {}",
+                        service_type_str
+                    ))
+                })?;
                 let headers = Self::deserialize_headers(headers_json.as_deref())?;
 
                 Ok(Some(Service {
@@ -156,29 +181,52 @@ impl ServiceRepository for SqliteServiceRepo {
         .await?;
 
         rows.into_iter()
-            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)| {
-                let service_type = ServiceType::from_str(&service_type_str)
-                    .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
-                let headers = Self::deserialize_headers(headers_json.as_deref())?;
-
-                Ok(Service {
+            .map(
+                |(
                     id,
                     node_id,
                     name,
-                    service_type,
+                    service_type_str,
                     target,
                     check_interval,
                     timeout,
                     method,
                     expected_code,
                     expected_body,
-                    headers,
+                    headers_json,
                     enabled,
                     is_public,
                     created_at,
                     updated_at,
-                })
-            })
+                )| {
+                    let service_type =
+                        ServiceType::from_str(&service_type_str).ok_or_else(|| {
+                            DbError::SerializationError(format!(
+                                "Invalid service type: {}",
+                                service_type_str
+                            ))
+                        })?;
+                    let headers = Self::deserialize_headers(headers_json.as_deref())?;
+
+                    Ok(Service {
+                        id,
+                        node_id,
+                        name,
+                        service_type,
+                        target,
+                        check_interval,
+                        timeout,
+                        method,
+                        expected_code,
+                        expected_body,
+                        headers,
+                        enabled,
+                        is_public,
+                        created_at,
+                        updated_at,
+                    })
+                },
+            )
             .collect()
     }
 
@@ -190,29 +238,52 @@ impl ServiceRepository for SqliteServiceRepo {
         .await?;
 
         rows.into_iter()
-            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)| {
-                let service_type = ServiceType::from_str(&service_type_str)
-                    .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
-                let headers = Self::deserialize_headers(headers_json.as_deref())?;
-
-                Ok(Service {
+            .map(
+                |(
                     id,
                     node_id,
                     name,
-                    service_type,
+                    service_type_str,
                     target,
                     check_interval,
                     timeout,
                     method,
                     expected_code,
                     expected_body,
-                    headers,
+                    headers_json,
                     enabled,
                     is_public,
                     created_at,
                     updated_at,
-                })
-            })
+                )| {
+                    let service_type =
+                        ServiceType::from_str(&service_type_str).ok_or_else(|| {
+                            DbError::SerializationError(format!(
+                                "Invalid service type: {}",
+                                service_type_str
+                            ))
+                        })?;
+                    let headers = Self::deserialize_headers(headers_json.as_deref())?;
+
+                    Ok(Service {
+                        id,
+                        node_id,
+                        name,
+                        service_type,
+                        target,
+                        check_interval,
+                        timeout,
+                        method,
+                        expected_code,
+                        expected_body,
+                        headers,
+                        enabled,
+                        is_public,
+                        created_at,
+                        updated_at,
+                    })
+                },
+            )
             .collect()
     }
 
@@ -224,29 +295,52 @@ impl ServiceRepository for SqliteServiceRepo {
         .await?;
 
         rows.into_iter()
-            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)| {
-                let service_type = ServiceType::from_str(&service_type_str)
-                    .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
-                let headers = Self::deserialize_headers(headers_json.as_deref())?;
-
-                Ok(Service {
+            .map(
+                |(
                     id,
                     node_id,
                     name,
-                    service_type,
+                    service_type_str,
                     target,
                     check_interval,
                     timeout,
                     method,
                     expected_code,
                     expected_body,
-                    headers,
+                    headers_json,
                     enabled,
                     is_public,
                     created_at,
                     updated_at,
-                })
-            })
+                )| {
+                    let service_type =
+                        ServiceType::from_str(&service_type_str).ok_or_else(|| {
+                            DbError::SerializationError(format!(
+                                "Invalid service type: {}",
+                                service_type_str
+                            ))
+                        })?;
+                    let headers = Self::deserialize_headers(headers_json.as_deref())?;
+
+                    Ok(Service {
+                        id,
+                        node_id,
+                        name,
+                        service_type,
+                        target,
+                        check_interval,
+                        timeout,
+                        method,
+                        expected_code,
+                        expected_body,
+                        headers,
+                        enabled,
+                        is_public,
+                        created_at,
+                        updated_at,
+                    })
+                },
+            )
             .collect()
     }
 
@@ -259,29 +353,52 @@ impl ServiceRepository for SqliteServiceRepo {
         .await?;
 
         rows.into_iter()
-            .map(|(id, node_id, name, service_type_str, target, check_interval, timeout, method, expected_code, expected_body, headers_json, enabled, is_public, created_at, updated_at)| {
-                let service_type = ServiceType::from_str(&service_type_str)
-                    .ok_or_else(|| DbError::SerializationError(format!("Invalid service type: {}", service_type_str)))?;
-                let headers = Self::deserialize_headers(headers_json.as_deref())?;
-
-                Ok(Service {
+            .map(
+                |(
                     id,
                     node_id,
                     name,
-                    service_type,
+                    service_type_str,
                     target,
                     check_interval,
                     timeout,
                     method,
                     expected_code,
                     expected_body,
-                    headers,
+                    headers_json,
                     enabled,
                     is_public,
                     created_at,
                     updated_at,
-                })
-            })
+                )| {
+                    let service_type =
+                        ServiceType::from_str(&service_type_str).ok_or_else(|| {
+                            DbError::SerializationError(format!(
+                                "Invalid service type: {}",
+                                service_type_str
+                            ))
+                        })?;
+                    let headers = Self::deserialize_headers(headers_json.as_deref())?;
+
+                    Ok(Service {
+                        id,
+                        node_id,
+                        name,
+                        service_type,
+                        target,
+                        check_interval,
+                        timeout,
+                        method,
+                        expected_code,
+                        expected_body,
+                        headers,
+                        enabled,
+                        is_public,
+                        created_at,
+                        updated_at,
+                    })
+                },
+            )
             .collect()
     }
 
@@ -298,7 +415,10 @@ impl ServiceRepository for SqliteServiceRepo {
         let timeout = update.timeout.unwrap_or(current.timeout);
         let method = update.method.as_ref().unwrap_or(&current.method);
         let expected_code = update.expected_code.unwrap_or(current.expected_code);
-        let expected_body = update.expected_body.as_ref().or(current.expected_body.as_ref());
+        let expected_body = update
+            .expected_body
+            .as_ref()
+            .or(current.expected_body.as_ref());
         let headers = update.headers.as_ref().or(current.headers.as_ref());
         let enabled = update.enabled.unwrap_or(current.enabled);
         let is_public = update.is_public.unwrap_or(current.is_public);
@@ -312,7 +432,7 @@ impl ServiceRepository for SqliteServiceRepo {
                 method = ?, expected_code = ?, expected_body = ?, headers = ?,
                 enabled = ?, is_public = ?, updated_at = ?
             WHERE id = ?
-            "#
+            "#,
         )
         .bind(name)
         .bind(target)
@@ -353,7 +473,7 @@ impl ServiceRepository for SqliteServiceRepo {
                 status_code, error_message, checked_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             RETURNING id
-            "#
+            "#,
         )
         .bind(result.service_id)
         .bind(result.agent_id)
@@ -382,7 +502,7 @@ impl ServiceRepository for SqliteServiceRepo {
                     service_id, agent_id, status, response_time,
                     status_code, error_message, checked_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                "#
+                "#,
             )
             .bind(result.service_id)
             .bind(result.agent_id)
@@ -414,9 +534,19 @@ impl ServiceRepository for SqliteServiceRepo {
         .await?;
 
         match row {
-            Some((id, service_id, agent_id, status_str, response_time, status_code, error_message, checked_at)) => {
-                let status = ServiceStatus::from_str(&status_str)
-                    .ok_or_else(|| DbError::SerializationError(format!("Invalid service status: {}", status_str)))?;
+            Some((
+                id,
+                service_id,
+                agent_id,
+                status_str,
+                response_time,
+                status_code,
+                error_message,
+                checked_at,
+            )) => {
+                let status = ServiceStatus::from_str(&status_str).ok_or_else(|| {
+                    DbError::SerializationError(format!("Invalid service status: {}", status_str))
+                })?;
 
                 Ok(Some(ServiceStatusRecord {
                     id,
@@ -444,7 +574,7 @@ impl ServiceRepository for SqliteServiceRepo {
             FROM service_status
             WHERE service_id = ? AND checked_at >= ?
             ORDER BY checked_at ASC
-            "#
+            "#,
         )
         .bind(service_id)
         .bind(thirty_hours_ago)
@@ -456,14 +586,18 @@ impl ServiceRepository for SqliteServiceRepo {
 
         for (status_str, response_time, checked_at) in rows {
             let hour_key = checked_at / 3600; // 按小时分组
-            let status = ServiceStatus::from_str(&status_str)
-                .ok_or_else(|| DbError::SerializationError(format!("Invalid service status: {}", status_str)))?;
+            let status = ServiceStatus::from_str(&status_str).ok_or_else(|| {
+                DbError::SerializationError(format!("Invalid service status: {}", status_str))
+            })?;
 
-            hourly_points.insert(hour_key, ServiceStatusPoint {
-                timestamp: checked_at,
-                status,
-                response_time,
-            });
+            hourly_points.insert(
+                hour_key,
+                ServiceStatusPoint {
+                    timestamp: checked_at,
+                    status,
+                    response_time,
+                },
+            );
         }
 
         // 生成最近30个小时的完整时间序列

@@ -113,7 +113,10 @@ mod tests {
 
     #[test]
     fn test_error_codes() {
-        assert_eq!(ServerError::BadRequest("test".to_string()).error_code(), 4000);
+        assert_eq!(
+            ServerError::BadRequest("test".to_string()).error_code(),
+            4000
+        );
         assert_eq!(ServerError::NotFound("test".to_string()).error_code(), 4004);
         assert_eq!(ServerError::Internal("test".to_string()).error_code(), 5000);
     }

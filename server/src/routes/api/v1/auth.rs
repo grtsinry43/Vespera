@@ -2,7 +2,12 @@
 //!
 //! 包含用户注册、登录、刷新 token、登出等功能
 
-use axum::{extract::State, Json};
+use axum::{
+    extract::State,
+    http::{header::COOKIE, header::SET_COOKIE, HeaderMap, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
 use base64::Engine;
 use chrono::Utc;
 use rand::Rng;
@@ -20,6 +25,88 @@ use crate::{
 
 use crate::state::AppState;
 use vespera_common::ServerError;
+
+const REFRESH_TOKEN_COOKIE: &str = "vespera_refresh_token";
+const REFRESH_TOKEN_COOKIE_MAX_AGE: i64 = 30 * 24 * 60 * 60;
+const ACCESS_TOKEN_COOKIE: &str = "vespera_access_token";
+const ACCESS_TOKEN_COOKIE_MAX_AGE: i64 = 7 * 24 * 60 * 60;
+
+fn refresh_cookie_secure() -> bool {
+    std::env::var("COOKIE_SECURE")
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn build_refresh_cookie(token: &str) -> String {
+    let secure = if refresh_cookie_secure() {
+        "; Secure"
+    } else {
+        ""
+    };
+    format!(
+        "{REFRESH_TOKEN_COOKIE}={token}; Max-Age={REFRESH_TOKEN_COOKIE_MAX_AGE}; Path=/; HttpOnly; SameSite=Strict{secure}"
+    )
+}
+
+fn build_access_cookie(token: &str) -> String {
+    let secure = if refresh_cookie_secure() {
+        "; Secure"
+    } else {
+        ""
+    };
+    format!(
+        "{ACCESS_TOKEN_COOKIE}={token}; Max-Age={ACCESS_TOKEN_COOKIE_MAX_AGE}; Path=/; HttpOnly; SameSite=Strict{secure}"
+    )
+}
+
+fn clear_refresh_cookie() -> String {
+    let secure = if refresh_cookie_secure() {
+        "; Secure"
+    } else {
+        ""
+    };
+    format!("{REFRESH_TOKEN_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict{secure}")
+}
+
+fn clear_access_cookie() -> String {
+    let secure = if refresh_cookie_secure() {
+        "; Secure"
+    } else {
+        ""
+    };
+    format!("{ACCESS_TOKEN_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict{secure}")
+}
+
+fn append_cookie(headers: &mut HeaderMap, cookie: String) -> Result<(), ServerError> {
+    let value = HeaderValue::from_str(&cookie)
+        .map_err(|_| ServerError::Internal("Failed to encode auth cookie".to_string()))?;
+    headers.append(SET_COOKIE, value);
+    Ok(())
+}
+
+fn extract_refresh_token_from_cookie(headers: &HeaderMap) -> Option<String> {
+    let cookie_header = headers.get(COOKIE)?.to_str().ok()?;
+
+    cookie_header.split(';').find_map(|part| {
+        let (name, value) = part.trim().split_once('=')?;
+        if name == REFRESH_TOKEN_COOKIE && !value.is_empty() {
+            Some(value.to_string())
+        } else {
+            None
+        }
+    })
+}
+
+fn resolve_refresh_token(
+    headers: &HeaderMap,
+    req: &RefreshTokenRequest,
+) -> Result<String, ServerError> {
+    req.refresh_token
+        .clone()
+        .or_else(|| extract_refresh_token_from_cookie(headers))
+        .ok_or_else(|| ServerError::Unauthorized("Missing refresh token".to_string()))
+}
 
 /// 生成随机 Refresh Token
 fn generate_refresh_token() -> String {
@@ -48,34 +135,20 @@ fn generate_refresh_token() -> String {
 pub async fn register(
     State(state): State<Arc<AppState>>,
     Json(req): Json<RegisterRequest>,
-) -> Result<Json<ApiResponse<LoginResponse>>, ServerError> {
+) -> Result<Response, ServerError> {
     let db = &state.db;
-    // 1. 检查是否为首次注册
-    let user_count = db
-        .users()
-        .count_users()
-        .await
-        .map_err(|e| ServerError::Internal(e.to_string()))?;
-
-    // 2. 确定角色 (首次注册可以是 admin,否则只能是 user)
-    let role = if user_count == 0 && req.is_admin {
-        "admin"
-    } else {
-        "user"
-    };
-
-    // 3. 哈希密码
+    // 1. 哈希密码
     let password_hash = hash_password(&req.password)
         .map_err(|e| ServerError::Internal(format!("Password hashing failed: {}", e)))?;
 
-    // 4. 创建用户
+    // 2. 创建用户。角色在 SQL 内原子决定，避免首次管理员注册竞态。
     let db_user = db
         .users()
-        .create_user(
+        .create_registered_user(
             &req.username,
             req.email.as_deref(),
-            Some(&password_hash),
-            role,
+            &password_hash,
+            req.is_admin,
         )
         .await
         .map_err(|e| match e {
@@ -88,7 +161,7 @@ pub async fn register(
             _ => ServerError::Internal(e.to_string()),
         })?;
 
-    // 5. 创建 JWT
+    // 3. 创建 JWT
     let jwt_secret = jwt_secret_from_env()
         .map_err(|e| ServerError::Internal(format!("JWT configuration failed: {}", e)))?;
 
@@ -101,28 +174,33 @@ pub async fn register(
     )
     .map_err(|e| ServerError::Internal(format!("JWT creation failed: {}", e)))?;
 
-    // 6. 创建 Refresh Token
+    // 4. 创建 Refresh Token
     let refresh_token = generate_refresh_token();
     db.users()
         .create_refresh_token(db_user.id, &refresh_token, 30, None) // 30 天
         .await
         .map_err(|e| ServerError::Internal(e.to_string()))?;
 
-    // 7. 更新最后登录时间
+    // 5. 更新最后登录时间
     db.users()
         .update_last_login(db_user.id)
         .await
         .map_err(|e| ServerError::Internal(e.to_string()))?;
 
-    // 8. 返回响应
+    // 6. 返回响应
     let expires_at = (Utc::now() + chrono::Duration::days(7)).timestamp();
-
-    Ok(Json(ApiResponse::success(LoginResponse {
-        access_token,
-        refresh_token,
+    let body = Json(ApiResponse::success(LoginResponse {
+        access_token: access_token.clone(),
+        refresh_token: None,
         user: db_user.to_public_user(),
         expires_at,
-    })))
+    }));
+
+    let mut headers = HeaderMap::new();
+    append_cookie(&mut headers, build_access_cookie(&access_token))?;
+    append_cookie(&mut headers, build_refresh_cookie(&refresh_token))?;
+
+    Ok((StatusCode::OK, headers, body).into_response())
 }
 
 /// 用户登录
@@ -142,7 +220,7 @@ pub async fn register(
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<LoginRequest>,
-) -> Result<Json<ApiResponse<LoginResponse>>, ServerError> {
+) -> Result<Response, ServerError> {
     let db = &state.db;
     // 1. 查找用户
     let db_user = db
@@ -199,12 +277,18 @@ pub async fn login(
     // 7. 返回响应
     let expires_at = (Utc::now() + chrono::Duration::days(7)).timestamp();
 
-    Ok(Json(ApiResponse::success(LoginResponse {
-        access_token,
-        refresh_token,
+    let body = Json(ApiResponse::success(LoginResponse {
+        access_token: access_token.clone(),
+        refresh_token: None,
         user: db_user.to_public_user(),
         expires_at,
-    })))
+    }));
+
+    let mut headers = HeaderMap::new();
+    append_cookie(&mut headers, build_access_cookie(&access_token))?;
+    append_cookie(&mut headers, build_refresh_cookie(&refresh_token))?;
+
+    Ok((StatusCode::OK, headers, body).into_response())
 }
 
 /// 刷新 Access Token
@@ -222,13 +306,15 @@ pub async fn login(
 )]
 pub async fn refresh(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<RefreshTokenRequest>,
-) -> Result<Json<ApiResponse<RefreshTokenResponse>>, ServerError> {
+) -> Result<Response, ServerError> {
     let db = &state.db;
+    let refresh_token = resolve_refresh_token(&headers, &req)?;
     // 1. 验证 Refresh Token
     let refresh_token_record = db
         .users()
-        .verify_refresh_token(&req.refresh_token)
+        .verify_refresh_token(&refresh_token)
         .await
         .map_err(|_| ServerError::Unauthorized("Invalid or expired refresh token".to_string()))?;
 
@@ -278,11 +364,20 @@ pub async fn refresh(
     // 7. 返回响应
     let expires_at = (Utc::now() + chrono::Duration::days(7)).timestamp();
 
-    Ok(Json(ApiResponse::success(RefreshTokenResponse {
-        access_token,
-        refresh_token: Some(new_refresh_token),
+    let body = Json(ApiResponse::success(RefreshTokenResponse {
+        access_token: access_token.clone(),
+        refresh_token: None,
         expires_at,
-    })))
+    }));
+
+    let mut response_headers = HeaderMap::new();
+    append_cookie(&mut response_headers, build_access_cookie(&access_token))?;
+    append_cookie(
+        &mut response_headers,
+        build_refresh_cookie(&new_refresh_token),
+    )?;
+
+    Ok((StatusCode::OK, response_headers, body).into_response())
 }
 
 /// 登出
@@ -303,12 +398,14 @@ pub async fn refresh(
 pub async fn logout(
     auth: AuthUser,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<RefreshTokenRequest>,
-) -> Result<Json<ApiResponse<()>>, ServerError> {
+) -> Result<Response, ServerError> {
     let db = &state.db;
+    let refresh_token = resolve_refresh_token(&headers, &req)?;
     let refresh_token_record = db
         .users()
-        .verify_refresh_token(&req.refresh_token)
+        .verify_refresh_token(&refresh_token)
         .await
         .map_err(|_| ServerError::Unauthorized("Invalid or expired refresh token".to_string()))?;
 
@@ -326,7 +423,16 @@ pub async fn logout(
 
     tracing::info!("User {} logged out", auth.username);
 
-    Ok(Json(ApiResponse::success(())))
+    let mut response_headers = HeaderMap::new();
+    append_cookie(&mut response_headers, clear_access_cookie())?;
+    append_cookie(&mut response_headers, clear_refresh_cookie())?;
+
+    Ok((
+        StatusCode::OK,
+        response_headers,
+        Json(ApiResponse::success(())),
+    )
+        .into_response())
 }
 
 /// 获取当前用户信息
@@ -378,7 +484,7 @@ pub async fn change_password(
     auth: AuthUser,
     State(state): State<Arc<AppState>>,
     Json(req): Json<ChangePasswordRequest>,
-) -> Result<Json<ApiResponse<()>>, ServerError> {
+) -> Result<Response, ServerError> {
     let db = &state.db;
     // 1. 查找用户
     let db_user = db
@@ -420,5 +526,14 @@ pub async fn change_password(
 
     tracing::info!("User {} changed password", auth.username);
 
-    Ok(Json(ApiResponse::success(())))
+    let mut response_headers = HeaderMap::new();
+    append_cookie(&mut response_headers, clear_access_cookie())?;
+    append_cookie(&mut response_headers, clear_refresh_cookie())?;
+
+    Ok((
+        StatusCode::OK,
+        response_headers,
+        Json(ApiResponse::success(())),
+    )
+        .into_response())
 }

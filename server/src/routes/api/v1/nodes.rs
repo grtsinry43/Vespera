@@ -337,9 +337,10 @@ pub async fn admin_update_node(
         .ok_or_else(|| ServerError::NotFound("Node not found".to_string()))?;
 
     // 准备更新数据
-    let tags_json = req.tags.as_ref().and_then(|tags| {
-        serde_json::to_string(tags).ok()
-    });
+    let tags_json = req
+        .tags
+        .as_ref()
+        .and_then(|tags| serde_json::to_string(tags).ok());
 
     // 更新节点
     state
@@ -563,7 +564,8 @@ fn sample_metrics(metrics: Vec<Metric>, sample_count: usize) -> Vec<Metric> {
 
         // 找到该段内的最后一个点
         while current_index < sorted_metrics.len()
-            && sorted_metrics[current_index].timestamp <= bucket_end_time {
+            && sorted_metrics[current_index].timestamp <= bucket_end_time
+        {
             current_index += 1;
         }
 

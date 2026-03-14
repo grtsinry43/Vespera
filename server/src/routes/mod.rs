@@ -1,2 +1,2 @@
-pub mod health;
 pub mod api;
+pub mod health;

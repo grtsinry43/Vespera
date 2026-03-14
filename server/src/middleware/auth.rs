@@ -153,6 +153,8 @@ mod tests {
 use axum::{extract::FromRequestParts, http::request::Parts};
 use vespera_common::UserRole;
 
+const ACCESS_TOKEN_COOKIE: &str = "vespera_access_token";
+
 /// 认证用户信息 (从 JWT 提取)
 #[derive(Debug, Clone)]
 pub struct AuthUser {
@@ -175,17 +177,23 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // 1. 从 Authorization header 提取 Bearer token
-        let auth_header = parts
+        // 1. 从 Authorization header 或 HttpOnly cookie 提取 token
+        let bearer_token = parts
             .headers
             .get(AUTHORIZATION)
             .and_then(|value| value.to_str().ok())
-            .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .map(ToOwned::to_owned);
 
-        // 2. 验证格式: "Bearer <token>"
-        let token = auth_header
-            .strip_prefix("Bearer ")
-            .ok_or_else(|| AppError::Unauthorized("Invalid Authorization format".to_string()))?;
+        let cookie_token = parts
+            .headers
+            .get(axum::http::header::COOKIE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(extract_access_token_from_cookie);
+
+        let token = bearer_token
+            .or(cookie_token)
+            .ok_or_else(|| AppError::Unauthorized("Missing authentication token".to_string()))?;
 
         // 3. 获取 JWT secret (从环境变量)
         let jwt_secret = crate::utils::jwt_secret_from_env().map_err(|e| {
@@ -194,7 +202,7 @@ where
         })?;
 
         // 4. 验证 JWT
-        let claims = crate::utils::verify_jwt(token, &jwt_secret).map_err(|e| {
+        let claims = crate::utils::verify_jwt(&token, &jwt_secret).map_err(|e| {
             tracing::warn!("JWT verification failed: {:?}", e);
             AppError::Unauthorized(format!("Invalid token: {}", e))
         })?;
@@ -216,6 +224,17 @@ where
             role,
         })
     }
+}
+
+fn extract_access_token_from_cookie(cookie_header: &str) -> Option<String> {
+    cookie_header.split(';').find_map(|part| {
+        let (name, value) = part.trim().split_once('=')?;
+        if name == ACCESS_TOKEN_COOKIE && !value.is_empty() {
+            Some(value.to_string())
+        } else {
+            None
+        }
+    })
 }
 
 /// 管理员用户 (需要 admin 角色)

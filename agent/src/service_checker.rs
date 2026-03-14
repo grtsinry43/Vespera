@@ -4,9 +4,12 @@
 
 use chrono::Utc;
 use reqwest::Client;
+use reqwest::Url;
+use std::net::IpAddr;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::lookup_host;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 use vespera_common::{Service, ServiceCheckResult, ServiceStatus, ServiceType};
@@ -40,6 +43,7 @@ pub enum CheckError {
 pub struct ServiceChecker {
     client: Client,
     agent_id: Option<i64>,
+    allow_private_targets: bool,
 }
 
 impl ServiceChecker {
@@ -51,6 +55,7 @@ impl ServiceChecker {
     /// - 限制最大连接数
     pub fn new(agent_id: Option<i64>) -> Self {
         let client = Client::builder()
+            .no_proxy()
             .pool_max_idle_per_host(10) // 每个 host 最多保持 10 个空闲连接
             .pool_idle_timeout(Duration::from_secs(90))
             .connect_timeout(Duration::from_secs(10))
@@ -58,7 +63,18 @@ impl ServiceChecker {
             .build()
             .expect("Failed to create HTTP client");
 
-        Self { client, agent_id }
+        Self {
+            client,
+            agent_id,
+            allow_private_targets: Self::allow_private_targets(),
+        }
+    }
+
+    #[cfg(test)]
+    fn new_for_tests(agent_id: Option<i64>, allow_private_targets: bool) -> Self {
+        let mut checker = Self::new(agent_id);
+        checker.allow_private_targets = allow_private_targets;
+        checker
     }
 
     /// 检查单个服务
@@ -93,8 +109,8 @@ impl ServiceChecker {
     ///
     /// 并发执行检查，使用 Semaphore 限制并发数
     pub async fn check_services(&self, services: &[Service]) -> Vec<ServiceCheckResult> {
-        use tokio::sync::Semaphore;
         use std::sync::Arc;
+        use tokio::sync::Semaphore;
 
         if services.is_empty() {
             return Vec::new();
@@ -129,17 +145,48 @@ impl ServiceChecker {
     }
 
     /// HTTP 服务检查
-    async fn check_http(
-        &self,
-        service: &Service,
-    ) -> (ServiceStatus, Option<i64>, Option<String>) {
+    async fn check_http(&self, service: &Service) -> (ServiceStatus, Option<i64>, Option<String>) {
+        let url = match Url::parse(&service.target) {
+            Ok(url) => url,
+            Err(e) => {
+                return (
+                    ServiceStatus::Error,
+                    None,
+                    Some(format!("Invalid target URL: {}", e)),
+                )
+            }
+        };
+
+        if !matches!(url.scheme(), "http" | "https") {
+            return (
+                ServiceStatus::Error,
+                None,
+                Some("Only http/https targets are allowed".to_string()),
+            );
+        }
+
+        let host = match url.host_str() {
+            Some(host) => host,
+            None => {
+                return (
+                    ServiceStatus::Error,
+                    None,
+                    Some("Missing target host".to_string()),
+                )
+            }
+        };
+
+        if let Err(e) = self.validate_host(host).await {
+            return (ServiceStatus::Error, None, Some(e));
+        }
+
         // 构建请求
         let mut request = match service.method.to_uppercase().as_str() {
-            "GET" => self.client.get(&service.target),
-            "POST" => self.client.post(&service.target),
-            "HEAD" => self.client.head(&service.target),
-            "PUT" => self.client.put(&service.target),
-            _ => self.client.get(&service.target), // 默认 GET
+            "GET" => self.client.get(url.clone()),
+            "POST" => self.client.post(url.clone()),
+            "HEAD" => self.client.head(url.clone()),
+            "PUT" => self.client.put(url.clone()),
+            _ => self.client.get(url.clone()), // 默认 GET
         };
 
         // 添加自定义 headers
@@ -162,7 +209,13 @@ impl ServiceChecker {
                     Some(format!("HTTP error: {}", e)),
                 )
             }
-            Err(_) => return (ServiceStatus::Timeout, None, Some("Request timeout".to_string())),
+            Err(_) => {
+                return (
+                    ServiceStatus::Timeout,
+                    None,
+                    Some("Request timeout".to_string()),
+                )
+            }
         };
 
         let status_code = response.status().as_u16() as i64;
@@ -216,12 +269,9 @@ impl ServiceChecker {
     /// 1. 解析 host:port
     /// 2. 尝试建立 TCP 连接
     /// 3. 可选：发送测试数据并读取响应（如果配置了 expected_body）
-    async fn check_tcp(
-        &self,
-        service: &Service,
-    ) -> (ServiceStatus, Option<i64>, Option<String>) {
+    async fn check_tcp(&self, service: &Service) -> (ServiceStatus, Option<i64>, Option<String>) {
         // 解析目标地址 (host:port)
-        let addr = match self.parse_tcp_target(&service.target) {
+        let addr = match self.parse_tcp_target(&service.target).await {
             Ok(addr) => addr,
             Err(e) => {
                 return (
@@ -245,12 +295,21 @@ impl ServiceChecker {
                     Some(format!("Connection failed: {}", e)),
                 )
             }
-            Err(_) => return (ServiceStatus::Timeout, None, Some("Connection timeout".to_string())),
+            Err(_) => {
+                return (
+                    ServiceStatus::Timeout,
+                    None,
+                    Some("Connection timeout".to_string()),
+                )
+            }
         };
 
         // 如果配置了 expected_body，则尝试发送/接收数据
         if let Some(expected_data) = &service.expected_body {
-            match self.tcp_exchange_data(stream, expected_data, timeout_duration).await {
+            match self
+                .tcp_exchange_data(stream, expected_data, timeout_duration)
+                .await
+            {
                 Ok(()) => (ServiceStatus::Up, None, None),
                 Err(e) => (
                     ServiceStatus::Down,
@@ -269,7 +328,7 @@ impl ServiceChecker {
     /// 支持格式：
     /// - `host:port` (example.com:3306)
     /// - `ip:port` (192.168.1.1:22)
-    fn parse_tcp_target(&self, target: &str) -> Result<String, String> {
+    async fn parse_tcp_target(&self, target: &str) -> Result<String, String> {
         // 验证格式是否为 host:port
         if !target.contains(':') {
             return Err(format!(
@@ -296,7 +355,78 @@ impl ServiceChecker {
             return Err("Empty host".to_string());
         }
 
+        self.validate_host(host).await?;
+
         Ok(target.to_string())
+    }
+
+    async fn validate_host(&self, host: &str) -> Result<(), String> {
+        if self.allow_private_targets {
+            return Ok(());
+        }
+
+        let normalized = host.trim_matches(['[', ']']);
+        if normalized.eq_ignore_ascii_case("localhost") || normalized.ends_with(".local") {
+            return Err(format!("Target host {} is not allowed", host));
+        }
+
+        if let Ok(ip) = normalized.parse::<IpAddr>() {
+            return Self::validate_ip(ip, host);
+        }
+
+        let resolved = lookup_host((normalized, 0))
+            .await
+            .map_err(|e| format!("Failed to resolve target host {}: {}", host, e))?;
+
+        let mut resolved_any = false;
+        for addr in resolved {
+            resolved_any = true;
+            Self::validate_ip(addr.ip(), host)?;
+        }
+
+        if !resolved_any {
+            return Err(format!(
+                "Target host {} did not resolve to any address",
+                host
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_ip(ip: IpAddr, host: &str) -> Result<(), String> {
+        let blocked = match ip {
+            IpAddr::V4(ipv4) => {
+                ipv4.is_private()
+                    || ipv4.is_loopback()
+                    || ipv4.is_link_local()
+                    || ipv4.is_broadcast()
+                    || ipv4.is_documentation()
+                    || ipv4.is_unspecified()
+            }
+            IpAddr::V6(ipv6) => {
+                ipv6.is_loopback()
+                    || ipv6.is_unspecified()
+                    || ipv6.is_unique_local()
+                    || ipv6.is_unicast_link_local()
+            }
+        };
+
+        if blocked {
+            Err(format!(
+                "Target host {} resolves to a private or local address",
+                host
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn allow_private_targets() -> bool {
+        std::env::var("SERVICE_CHECK_ALLOW_PRIVATE_TARGETS")
+            .ok()
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
     }
 
     /// TCP 数据交换
@@ -363,6 +493,7 @@ impl ServiceChecker {
         Self {
             client: self.client.clone(),
             agent_id: self.agent_id,
+            allow_private_targets: self.allow_private_targets,
         }
     }
 }
@@ -370,7 +501,6 @@ impl ServiceChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_http_check_success() {
@@ -380,30 +510,39 @@ mod tests {
 
     #[test]
     fn test_checker_creation() {
-        let checker = ServiceChecker::new(Some(1));
+        let checker = ServiceChecker::new_for_tests(Some(1), false);
         assert_eq!(checker.agent_id, Some(1));
     }
 
-    #[test]
-    fn test_parse_tcp_target_valid() {
-        let checker = ServiceChecker::new(None);
+    #[tokio::test]
+    async fn test_parse_tcp_target_valid() {
+        let checker = ServiceChecker::new_for_tests(None, true);
 
         // 测试有效格式
-        assert!(checker.parse_tcp_target("example.com:3306").is_ok());
-        assert!(checker.parse_tcp_target("192.168.1.1:22").is_ok());
-        assert!(checker.parse_tcp_target("localhost:8080").is_ok());
-        assert!(checker.parse_tcp_target("db.example.com:5432").is_ok());
+        assert!(checker.parse_tcp_target("example.com:3306").await.is_ok());
+        assert!(checker.parse_tcp_target("192.168.1.1:22").await.is_ok());
+        assert!(checker.parse_tcp_target("localhost:8080").await.is_ok());
+        assert!(checker
+            .parse_tcp_target("db.example.com:5432")
+            .await
+            .is_ok());
     }
 
-    #[test]
-    fn test_parse_tcp_target_invalid() {
-        let checker = ServiceChecker::new(None);
+    #[tokio::test]
+    async fn test_parse_tcp_target_invalid() {
+        let checker = ServiceChecker::new_for_tests(None, true);
 
         // 测试无效格式
-        assert!(checker.parse_tcp_target("example.com").is_err()); // 缺少端口
-        assert!(checker.parse_tcp_target(":3306").is_err()); // 缺少主机
-        assert!(checker.parse_tcp_target("example.com:abc").is_err()); // 无效端口
-        assert!(checker.parse_tcp_target("example.com:99999").is_err()); // 端口超出范围
+        assert!(checker.parse_tcp_target("example.com").await.is_err()); // 缺少端口
+        assert!(checker.parse_tcp_target(":3306").await.is_err()); // 缺少主机
+        assert!(checker.parse_tcp_target("example.com:abc").await.is_err()); // 无效端口
+        assert!(checker.parse_tcp_target("example.com:99999").await.is_err()); // 端口超出范围
+    }
+
+    #[tokio::test]
+    async fn test_validate_private_target_blocked_by_default() {
+        let checker = ServiceChecker::new_for_tests(None, false);
+        assert!(checker.parse_tcp_target("127.0.0.1:22").await.is_err());
     }
 
     #[tokio::test]
@@ -413,4 +552,3 @@ mod tests {
         // 在实际环境中可能需要 skip 或 mock
     }
 }
-

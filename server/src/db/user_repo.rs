@@ -122,18 +122,47 @@ impl UserRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| {
-            // 检查唯一性约束错误
-            if let sqlx::Error::Database(ref db_err) = e {
-                if db_err.message().contains("username") {
-                    return UserRepoError::UsernameExists;
-                }
-                if db_err.message().contains("email") {
-                    return UserRepoError::EmailExists;
-                }
-            }
-            UserRepoError::DatabaseError(e)
-        })?;
+        .map_err(map_constraint_error)?;
+
+        self.find_by_id(result.last_insert_rowid()).await
+    }
+
+    /// 注册用户。
+    ///
+    /// 使用单条 INSERT 语句决定是否授予首个管理员角色，避免并发注册竞态。
+    pub async fn create_registered_user(
+        &self,
+        username: &str,
+        email: Option<&str>,
+        password_hash: &str,
+        request_admin: bool,
+    ) -> Result<DbUser, UserRepoError> {
+        let now = Utc::now().timestamp();
+
+        let result = sqlx::query!(
+            r#"
+            INSERT INTO users (username, email, password_hash, role, is_active, created_at, updated_at)
+            VALUES (
+                ?, ?, ?,
+                CASE
+                    WHEN ? = 1 AND NOT EXISTS (SELECT 1 FROM users)
+                    THEN 'admin'
+                    ELSE 'user'
+                END,
+                ?, ?, ?
+            )
+            "#,
+            username,
+            email,
+            password_hash,
+            request_admin,
+            true,
+            now,
+            now
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(map_constraint_error)?;
 
         self.find_by_id(result.last_insert_rowid()).await
     }
@@ -204,7 +233,7 @@ impl UserRepository {
     ) -> Result<(), UserRepoError> {
         let now = Utc::now().timestamp();
 
-        sqlx::query!(
+        let result = sqlx::query!(
             r#"
             UPDATE users
             SET password_hash = ?, updated_at = ?
@@ -217,12 +246,16 @@ impl UserRepository {
         .execute(&self.pool)
         .await?;
 
+        if result.rows_affected() == 0 {
+            return Err(UserRepoError::UserNotFound);
+        }
+
         Ok(())
     }
 
     /// 删除用户
     pub async fn delete_user(&self, user_id: i64) -> Result<(), UserRepoError> {
-        sqlx::query!(
+        let result = sqlx::query!(
             r#"
             DELETE FROM users
             WHERE id = ?
@@ -232,15 +265,15 @@ impl UserRepository {
         .execute(&self.pool)
         .await?;
 
+        if result.rows_affected() == 0 {
+            return Err(UserRepoError::UserNotFound);
+        }
+
         Ok(())
     }
 
     /// 列出所有用户
-    pub async fn list_users(
-        &self,
-        limit: i64,
-        offset: i64,
-    ) -> Result<Vec<DbUser>, UserRepoError> {
+    pub async fn list_users(&self, limit: i64, offset: i64) -> Result<Vec<DbUser>, UserRepoError> {
         sqlx::query_as!(
             DbUser,
             r#"
@@ -312,10 +345,7 @@ impl UserRepository {
     }
 
     /// 验证 Refresh Token
-    pub async fn verify_refresh_token(
-        &self,
-        token: &str,
-    ) -> Result<DbRefreshToken, UserRepoError> {
+    pub async fn verify_refresh_token(&self, token: &str) -> Result<DbRefreshToken, UserRepoError> {
         let token_hash = format!("{:x}", Sha256::digest(token.as_bytes()));
         let now = Utc::now().timestamp();
 
@@ -345,10 +375,7 @@ impl UserRepository {
     }
 
     /// 更新 Refresh Token 最后使用时间
-    pub async fn update_refresh_token_last_used(
-        &self,
-        token_id: i64,
-    ) -> Result<(), UserRepoError> {
+    pub async fn update_refresh_token_last_used(&self, token_id: i64) -> Result<(), UserRepoError> {
         let now = Utc::now().timestamp();
 
         sqlx::query!(
@@ -454,4 +481,15 @@ impl UserRepository {
 
         Ok(result.rows_affected())
     }
+}
+fn map_constraint_error(e: sqlx::Error) -> UserRepoError {
+    if let sqlx::Error::Database(ref db_err) = e {
+        if db_err.message().contains("username") {
+            return UserRepoError::UsernameExists;
+        }
+        if db_err.message().contains("email") {
+            return UserRepoError::EmailExists;
+        }
+    }
+    UserRepoError::DatabaseError(e)
 }

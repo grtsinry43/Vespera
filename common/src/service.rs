@@ -70,9 +70,9 @@ pub struct Service {
     #[serde(rename = "type")]
     pub service_type: ServiceType,
     pub target: String,
-    pub check_interval: i64,      // 秒
-    pub timeout: i64,             // 秒
-    pub method: String,           // GET/POST/HEAD 等
+    pub check_interval: i64, // 秒
+    pub timeout: i64,        // 秒
+    pub method: String,      // GET/POST/HEAD 等
     pub expected_code: i64,
     pub expected_body: Option<String>,
     pub headers: Option<HashMap<String, String>>,
@@ -133,10 +133,10 @@ pub struct ServiceCheckResult {
     pub service_id: i64,
     pub agent_id: Option<i64>,
     pub status: ServiceStatus,
-    pub response_time: Option<i64>,   // 毫秒
+    pub response_time: Option<i64>, // 毫秒
     pub status_code: Option<i64>,
     pub error_message: Option<String>,
-    pub checked_at: i64,              // unix timestamp
+    pub checked_at: i64, // unix timestamp
 }
 
 /// 服务状态历史记录

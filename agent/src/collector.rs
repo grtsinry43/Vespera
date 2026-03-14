@@ -1,7 +1,7 @@
-use sysinfo::{Disks, Networks, System};
-use vespera_common::{ReportRequest, MetricsData, DiskInfo};
 use chrono::Utc;
+use sysinfo::{Disks, Networks, System};
 use uuid::Uuid;
+use vespera_common::{DiskInfo, MetricsData, ReportRequest};
 
 /// 节点基础信息（在整个生命周期内不变）
 pub struct NodeInfo {
@@ -65,30 +65,34 @@ impl SystemCollector {
         };
 
         // 磁盘信息（每个挂载点单独记录）
-        let disk_info: Vec<DiskInfo> = self.disks.iter().map(|disk| {
-            let total = disk.total_space() as i64;
-            let used = (disk.total_space() - disk.available_space()) as i64;
-            let usage = if total > 0 {
-                (used as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
+        let disk_info: Vec<DiskInfo> = self
+            .disks
+            .iter()
+            .map(|disk| {
+                let total = disk.total_space() as i64;
+                let used = (disk.total_space() - disk.available_space()) as i64;
+                let usage = if total > 0 {
+                    (used as f64 / total as f64) * 100.0
+                } else {
+                    0.0
+                };
 
-            DiskInfo {
-                mount: disk.mount_point().to_string_lossy().to_string(),
-                used,
-                total,
-                usage,
-            }
-        }).collect();
+                DiskInfo {
+                    mount: disk.mount_point().to_string_lossy().to_string(),
+                    used,
+                    total,
+                    usage,
+                }
+            })
+            .collect();
 
         // 网络流量（所有网卡总和，累计值）
-        let (network_in, network_out) = self.networks.iter().fold((0u64, 0u64), |(rx, tx), (_, data)| {
-            (
-                rx + data.total_received(),
-                tx + data.total_transmitted(),
-            )
-        });
+        let (network_in, network_out) = self
+            .networks
+            .iter()
+            .fold((0u64, 0u64), |(rx, tx), (_, data)| {
+                (rx + data.total_received(), tx + data.total_transmitted())
+            });
 
         // 更新上次的值（用于下次增量计算）
         self.last_network_in = network_in;

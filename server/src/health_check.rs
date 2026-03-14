@@ -2,9 +2,9 @@
 //!
 //! 负责定期检查节点的在线状态，将超时未上报的节点标记为离线
 
+use crate::state::AppState;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
-use crate::state::AppState;
 use vespera_common::ServerMessage;
 
 /// 心跳超时阈值（秒）
@@ -66,7 +66,11 @@ async fn check_stale_nodes(state: &AppState) -> Result<(), Box<dyn std::error::E
     // 批量更新状态并广播下线事件
     for node in stale_nodes {
         // 更新节点状态为 offline
-        if let Err(e) = state.db.update_node_status(node.id, "offline", node.last_seen).await {
+        if let Err(e) = state
+            .db
+            .update_node_status(node.id, "offline", node.last_seen)
+            .await
+        {
             tracing::error!(
                 "Failed to update node {} status to offline: {:?}",
                 node.id,

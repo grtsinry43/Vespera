@@ -1,8 +1,8 @@
 use reqwest::Client;
 use serde::Deserialize;
+use std::time::Duration;
 use thiserror::Error;
 use vespera_common::{ReportRequest, Service, ServiceCheckResult};
-use std::time::Duration;
 
 #[derive(Debug, Error)]
 pub enum ReporterError {
@@ -41,6 +41,7 @@ impl Reporter {
     /// 创建新的上报器实例
     pub fn new(server_url: String, secret: String, timeout: Duration, retry_attempts: u32) -> Self {
         let client = Client::builder()
+            .no_proxy()
             .timeout(timeout)
             .build()
             .expect("Failed to create HTTP client");
@@ -108,7 +109,10 @@ impl Reporter {
         let status = response.status();
 
         if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(ReporterError::ServerError {
                 status: status.as_u16(),
                 message: error_text,
@@ -121,7 +125,9 @@ impl Reporter {
         if api_response.code != 0 {
             return Err(ReporterError::ServerError {
                 status: 200,
-                message: api_response.msg.unwrap_or_else(|| "Unknown error".to_string()),
+                message: api_response
+                    .msg
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             });
         }
 
@@ -131,7 +137,10 @@ impl Reporter {
 
     /// 获取启用的服务列表
     pub async fn fetch_services(&self) -> Result<Vec<Service>, ReporterError> {
-        let url = format!("{}/api/v1/agent/services", self.server_url.trim_end_matches('/'));
+        let url = format!(
+            "{}/api/v1/agent/services",
+            self.server_url.trim_end_matches('/')
+        );
 
         let response = self
             .client
@@ -145,7 +154,10 @@ impl Reporter {
         let status = response.status();
 
         if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(ReporterError::ServerError {
                 status: status.as_u16(),
                 message: error_text,
@@ -164,7 +176,9 @@ impl Reporter {
         if api_response.code != 0 {
             return Err(ReporterError::ServerError {
                 status: 200,
-                message: api_response.msg.unwrap_or_else(|| "Unknown error".to_string()),
+                message: api_response
+                    .msg
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             });
         }
 
@@ -172,12 +186,18 @@ impl Reporter {
     }
 
     /// 上报服务检查结果
-    pub async fn report_service_status(&self, results: &[ServiceCheckResult]) -> Result<(), ReporterError> {
+    pub async fn report_service_status(
+        &self,
+        results: &[ServiceCheckResult],
+    ) -> Result<(), ReporterError> {
         if results.is_empty() {
             return Ok(());
         }
 
-        let url = format!("{}/api/v1/agent/service-status", self.server_url.trim_end_matches('/'));
+        let url = format!(
+            "{}/api/v1/agent/service-status",
+            self.server_url.trim_end_matches('/')
+        );
 
         let response = self
             .client
@@ -193,7 +213,10 @@ impl Reporter {
         let status = response.status();
 
         if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(ReporterError::ServerError {
                 status: status.as_u16(),
                 message: error_text,
@@ -205,11 +228,16 @@ impl Reporter {
         if api_response.code != 0 {
             return Err(ReporterError::ServerError {
                 status: 200,
-                message: api_response.msg.unwrap_or_else(|| "Unknown error".to_string()),
+                message: api_response
+                    .msg
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             });
         }
 
-        tracing::debug!("Service status reported successfully: {} results", results.len());
+        tracing::debug!(
+            "Service status reported successfully: {} results",
+            results.len()
+        );
         Ok(())
     }
 }

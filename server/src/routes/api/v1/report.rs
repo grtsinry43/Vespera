@@ -1,12 +1,12 @@
 use axum::{extract::State, Json};
 use std::sync::Arc;
 
-use vespera_common::{ReportRequest, Response, ServerMessage, MetricsUpdate, DiskInfoWs};
 use crate::{
     db::models::{DiskInfo, Metric, NodeCreate},
     error::AppError,
     state::AppState,
 };
+use vespera_common::{DiskInfoWs, MetricsUpdate, ReportRequest, Response, ServerMessage};
 
 /// Agent 数据上报端点
 ///
@@ -54,11 +54,7 @@ pub async fn report_handler(
 
             state
                 .db
-                .update_node_status(
-                    existing_node.id,
-                    "online",
-                    req.metrics.timestamp,
-                )
+                .update_node_status(existing_node.id, "online", req.metrics.timestamp)
                 .await?;
 
             (
@@ -155,7 +151,10 @@ pub async fn report_handler(
             tags: tags_json,
         };
 
-        if let Err(e) = alert_engine.evaluate_metrics(&node_for_alert, &metric).await {
+        if let Err(e) = alert_engine
+            .evaluate_metrics(&node_for_alert, &metric)
+            .await
+        {
             tracing::error!("Failed to evaluate alerts: {:?}", e);
         }
     }
@@ -189,7 +188,9 @@ pub async fn report_handler(
     };
 
     // 广播指标更新
-    let broadcast_result = state.broadcaster.broadcast(ServerMessage::MetricsUpdate(ws_update));
+    let broadcast_result = state
+        .broadcaster
+        .broadcast(ServerMessage::MetricsUpdate(ws_update));
 
     // 记录广播结果 (不影响响应)
     match broadcast_result {
@@ -211,10 +212,9 @@ pub async fn report_handler(
 
     // 如果是新节点,广播上线事件
     if is_new_node {
-        let _ = state.broadcaster.broadcast(ServerMessage::NodeOnline {
-            node_id,
-            node_name,
-        });
+        let _ = state
+            .broadcaster
+            .broadcast(ServerMessage::NodeOnline { node_id, node_name });
     }
 
     let elapsed = start.elapsed();
@@ -244,9 +244,9 @@ pub async fn report_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vespera_common::request::{MetricsData, DiskInfo as RequestDiskInfo};
     use crate::test_utils::create_test_db;
     use uuid::Uuid;
+    use vespera_common::request::{DiskInfo as RequestDiskInfo, MetricsData};
 
     #[tokio::test]
     async fn test_first_report_creates_node() {

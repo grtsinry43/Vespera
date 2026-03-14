@@ -9,16 +9,16 @@ pub struct Node {
     pub name: String,
     pub ip_address: String,
     pub agent_version: String,
-    pub os_type: String,        // linux/windows/macos
+    pub os_type: String, // linux/windows/macos
     pub os_version: Option<String>,
-    pub cpu_cores: i64,         // SQLite INTEGER = i64
-    pub total_memory: i64,      // bytes
-    pub status: String,         // online/offline/error
-    pub last_seen: i64,         // unix timestamp
+    pub cpu_cores: i64,    // SQLite INTEGER = i64
+    pub total_memory: i64, // bytes
+    pub status: String,    // online/offline/error
+    pub last_seen: i64,    // unix timestamp
     pub created_at: i64,
     pub updated_at: i64,
     pub is_public: bool,
-    pub tags: Option<String>,   // JSON array
+    pub tags: Option<String>, // JSON array
 }
 
 /// 创建节点的输入结构
@@ -50,9 +50,9 @@ impl NodeCreate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiskInfo {
     pub mount: String,
-    pub used: i64,      // bytes
-    pub total: i64,     // bytes
-    pub usage: f64,     // 0-100 (SQLite REAL = f64)
+    pub used: i64,  // bytes
+    pub total: i64, // bytes
+    pub usage: f64, // 0-100 (SQLite REAL = f64)
 }
 
 /// 监控指标（时序数据）
@@ -63,7 +63,7 @@ pub struct Metric {
     pub timestamp: i64,
 
     // CPU
-    pub cpu_usage: f64,     // SQLite REAL = f64
+    pub cpu_usage: f64, // SQLite REAL = f64
     pub cpu_cores: i64,
 
     // Memory
@@ -137,8 +137,8 @@ impl DbUser {
 pub struct OAuthAccount {
     pub id: i64,
     pub user_id: i64,
-    pub provider: String,          // "google" | "github"
-    pub provider_user_id: String,  // OAuth 提供商的 user ID
+    pub provider: String,         // "google" | "github"
+    pub provider_user_id: String, // OAuth 提供商的 user ID
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
     pub expires_at: Option<i64>,
@@ -151,7 +151,7 @@ pub struct OAuthAccount {
 pub struct DbRefreshToken {
     pub id: i64,
     pub user_id: i64,
-    pub token_hash: String,        // SHA-256 哈希
+    pub token_hash: String, // SHA-256 哈希
     pub expires_at: i64,
     pub created_at: i64,
     pub last_used_at: Option<i64>,

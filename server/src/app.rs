@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     http::{HeaderValue, Method},
     middleware,
     routing::{delete, get, post, put},
@@ -50,7 +51,13 @@ pub fn create_app(db: DbRepo) -> Router {
         });
     let cors = CorsLayer::new()
         .allow_origin(allowed_origins)
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers(Any);
 
     // Agent 上报端点 (需要鉴权)
@@ -111,14 +118,8 @@ pub fn create_app(db: DbRepo) -> Router {
 
     // 节点管理路由 (普通用户可见)
     let node_routes = Router::new()
-        .route(
-            "/nodes",
-            get(routes::api::v1::nodes::list_nodes),
-        )
-        .route(
-            "/nodes/{id}",
-            get(routes::api::v1::nodes::get_node),
-        )
+        .route("/nodes", get(routes::api::v1::nodes::list_nodes))
+        .route("/nodes/{id}", get(routes::api::v1::nodes::get_node))
         .route(
             "/nodes/{id}/metrics",
             get(routes::api::v1::nodes::get_node_metrics),
@@ -207,6 +208,7 @@ pub fn create_app(db: DbRepo) -> Router {
         .nest("/api", api_routes)
         .merge(Scalar::with_url("/scalar", openapi.clone()))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
+        .layer(DefaultBodyLimit::max(1024 * 1024))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

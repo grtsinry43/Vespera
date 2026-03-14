@@ -70,14 +70,13 @@
 
     // 初始化 WebSocket
     async function initWebSocket() {
-        const token = authStorage.getAccessToken();
-        if (!token || !server) {
-            console.warn("No token or server found, skipping WebSocket connection");
+        if (!server) {
+            console.warn("No server found, skipping WebSocket connection");
             return;
         }
 
         try {
-            ws = new WebSocketManager(token);
+            ws = new WebSocketManager(authStorage.getAccessToken());
             await ws.connect();
             console.log("WebSocket connected");
 

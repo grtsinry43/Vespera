@@ -4,4 +4,3 @@ pub mod nodes;
 pub mod report;
 pub mod services;
 pub mod users;
-

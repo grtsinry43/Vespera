@@ -105,8 +105,9 @@ impl Config {
 
     /// 保存配置到文件
     fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), ConfigError> {
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| ConfigError::ValidationError(format!("Failed to serialize config: {}", e)))?;
+        let content = toml::to_string_pretty(self).map_err(|e| {
+            ConfigError::ValidationError(format!("Failed to serialize config: {}", e))
+        })?;
         fs::write(path, content)?;
         Ok(())
     }
@@ -127,12 +128,12 @@ impl Config {
             Some(uuid)
         };
 
-        let node_name = std::env::var("VESPERA_NODE_NAME")
-            .unwrap_or_else(|_| hostname::get()
+        let node_name = std::env::var("VESPERA_NODE_NAME").unwrap_or_else(|_| {
+            hostname::get()
                 .ok()
                 .and_then(|h| h.into_string().ok())
                 .unwrap_or_else(|| "unknown-node".to_string())
-            );
+        });
 
         let server_url = std::env::var("VESPERA_SERVER_URL")
             .unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -211,7 +212,8 @@ impl Config {
 
     /// 获取节点 UUID（确保一定有值）
     pub fn get_node_uuid(&self) -> Uuid {
-        self.agent.node_uuid
+        self.agent
+            .node_uuid
             .as_ref()
             .and_then(|s| Uuid::parse_str(s).ok())
             .unwrap_or_else(|| {

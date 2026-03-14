@@ -40,7 +40,10 @@ impl Broadcaster {
     /// # 性能
     /// - 零拷贝 (broadcast 内部使用 Arc)
     /// - 非阻塞 (send 立即返回)
-    pub fn broadcast(&self, msg: ServerMessage) -> Result<usize, broadcast::error::SendError<ServerMessage>> {
+    pub fn broadcast(
+        &self,
+        msg: ServerMessage,
+    ) -> Result<usize, broadcast::error::SendError<ServerMessage>> {
         self.tx.send(msg)
     }
 
@@ -91,7 +94,7 @@ mod tests {
         let received2 = rx2.recv().await.unwrap();
 
         match (received1, received2) {
-            (ServerMessage::Ping, ServerMessage::Ping) => {},
+            (ServerMessage::Ping, ServerMessage::Ping) => {}
             _ => panic!("Expected Ping message"),
         }
     }

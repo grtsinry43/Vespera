@@ -20,10 +20,11 @@ use axum::{
         ws::{Message, WebSocket},
         State, WebSocketUpgrade,
     },
-    response::Response,
+    http::{header::AUTHORIZATION, header::COOKIE, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
 };
+use futures_util::{SinkExt, StreamExt};
 use tokio::sync::broadcast;
-use futures_util::{StreamExt, SinkExt};
 
 use vespera_common::{ClientMessage, ServerMessage, UserRole};
 
@@ -35,6 +36,14 @@ const INITIAL_MESSAGE_TIMEOUT_SECS: u64 = 5;
 
 /// 心跳间隔 (秒)
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
+
+/// 单条客户端消息最大长度
+const MAX_CLIENT_MESSAGE_SIZE_BYTES: usize = 16 * 1024;
+
+/// 每个会话最多订阅的节点数量
+const MAX_SUBSCRIPTIONS_PER_SESSION: usize = 512;
+
+const ACCESS_TOKEN_COOKIE: &str = "vespera_access_token";
 
 /// WebSocket 升级处理器
 ///
@@ -56,37 +65,58 @@ const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
 ) -> Response {
-    ws.on_upgrade(|socket| handle_socket(socket, state))
+    let permit = match state.ws_connection_limiter.clone().try_acquire_owned() {
+        Ok(permit) => permit,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "WebSocket connection limit reached",
+            )
+                .into_response();
+        }
+    };
+
+    let auth_user = authenticate_from_headers(&headers);
+
+    ws.on_upgrade(|socket| handle_socket(socket, state, auth_user, permit))
 }
 
 /// 处理单个 WebSocket 连接
-async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
+async fn handle_socket(
+    socket: WebSocket,
+    state: Arc<AppState>,
+    initial_auth_user: Option<AuthUser>,
+    _permit: tokio::sync::OwnedSemaphorePermit,
+) {
     // 分离读写流
     let (mut sender, mut receiver) = socket.split();
 
     // 1. 尝试接收首条消息 (可能是认证消息，也可能是其他消息)
     // 如果是认证消息则进行认证，否则以匿名模式运行
-    let auth_user = match tokio::time::timeout(
-        Duration::from_secs(INITIAL_MESSAGE_TIMEOUT_SECS),
-        try_authenticate(&mut receiver, &mut sender),
-    )
-    .await
-    {
-        Ok(Some(user)) => {
-            // 认证成功
-            tracing::info!(user_id = user.id, username = %user.username, "WebSocket authenticated");
-            Some(user)
-        }
-        Ok(None) => {
-            // 匿名模式
-            tracing::info!("WebSocket connected in anonymous mode");
-            None
-        }
-        Err(_) => {
-            // 超时，继续以匿名模式运行
-            tracing::info!("WebSocket initial message timeout, running in anonymous mode");
-            None
+    let auth_user = if let Some(user) = initial_auth_user {
+        tracing::info!(user_id = user.id, username = %user.username, "WebSocket authenticated from handshake");
+        Some(user)
+    } else {
+        match tokio::time::timeout(
+            Duration::from_secs(INITIAL_MESSAGE_TIMEOUT_SECS),
+            try_authenticate(&mut receiver, &mut sender),
+        )
+        .await
+        {
+            Ok(Some(user)) => {
+                tracing::info!(user_id = user.id, username = %user.username, "WebSocket authenticated");
+                Some(user)
+            }
+            Ok(None) => {
+                tracing::info!("WebSocket connected in anonymous mode");
+                None
+            }
+            Err(_) => {
+                tracing::info!("WebSocket initial message timeout, running in anonymous mode");
+                None
+            }
         }
     };
 
@@ -96,7 +126,9 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     // 3. 订阅广播通道
     let mut broadcast_rx = state.broadcaster.subscribe();
 
-    let user_id_str = session.user.as_ref()
+    let user_id_str = session
+        .user
+        .as_ref()
         .map(|u| u.id.to_string())
         .unwrap_or_else(|| "anonymous".to_string());
 
@@ -107,7 +139,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     );
 
     // 4. 创建心跳定时器
-    let mut heartbeat_interval = tokio::time::interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
+    let mut heartbeat_interval =
+        tokio::time::interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
     // 5. 消息循环
     loop {
@@ -189,7 +222,9 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    let final_user_str = session.user.as_ref()
+    let final_user_str = session
+        .user
+        .as_ref()
         .map(|u| format!("{} ({})", u.username, u.id))
         .unwrap_or_else(|| "anonymous".to_string());
 
@@ -218,7 +253,12 @@ async fn try_authenticate(
 
     // 必须是 Text 消息
     let text = match msg {
-        Message::Text(t) => t.to_string(),
+        Message::Text(t) => {
+            if t.len() > MAX_CLIENT_MESSAGE_SIZE_BYTES {
+                return None;
+            }
+            t.to_string()
+        }
         _ => return None, // 非文本消息，以匿名模式运行
     };
 
@@ -235,55 +275,11 @@ async fn try_authenticate(
     };
 
     // 验证 JWT
-    let jwt_secret = match crate::utils::jwt_secret_from_env() {
-        Ok(secret) => secret,
-        Err(e) => {
-            tracing::error!("WebSocket JWT secret unavailable: {}", e);
-            let error_msg = ServerMessage::AuthFailed {
-                message: "Server authentication configuration error".to_string(),
-            };
-            if let Ok(json) = serde_json::to_string(&error_msg) {
-                let _ = sender.send(Message::Text(json.into())).await;
-            }
-            return None;
-        }
-    };
-
-    let claims = match crate::utils::verify_jwt(&token, &jwt_secret) {
-        Ok(c) => c,
-        Err(e) => {
-            // 认证失败
-            tracing::warn!("WebSocket JWT verification failed: {:?}", e);
-            let error_msg = ServerMessage::AuthFailed {
-                message: format!("Invalid token: {}", e),
-            };
-            if let Ok(json) = serde_json::to_string(&error_msg) {
-                let _ = sender.send(Message::Text(json.into())).await;
-            }
-            return None;
-        }
-    };
-
-    // 解析用户信息
-    let id = match claims.sub.parse::<i64>() {
-        Ok(id) => id,
-        Err(_) => {
-            let error_msg = ServerMessage::AuthFailed {
-                message: "Invalid user ID in token".to_string(),
-            };
-            if let Ok(json) = serde_json::to_string(&error_msg) {
-                let _ = sender.send(Message::Text(json.into())).await;
-            }
-            return None;
-        }
-    };
-
-    let role = match UserRole::from_str(&claims.role) {
-        Some(r) => r,
-        None => {
-            let error_msg = ServerMessage::AuthFailed {
-                message: "Invalid role in token".to_string(),
-            };
+    let user = match authenticate_token(&token) {
+        Ok(user) => user,
+        Err(message) => {
+            tracing::warn!("WebSocket JWT verification failed: {}", message);
+            let error_msg = ServerMessage::AuthFailed { message };
             if let Ok(json) = serde_json::to_string(&error_msg) {
                 let _ = sender.send(Message::Text(json.into())).await;
             }
@@ -297,11 +293,7 @@ async fn try_authenticate(
         let _ = sender.send(Message::Text(json.into())).await;
     }
 
-    Some(AuthUser {
-        id,
-        username: claims.username.unwrap_or_else(|| format!("user_{}", id)),
-        role,
-    })
+    Some(user)
 }
 
 /// WebSocket 会话
@@ -381,7 +373,12 @@ async fn handle_client_message(
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
 ) -> Result<(), WsError> {
     let text = match msg {
-        Message::Text(t) => t.to_string(),
+        Message::Text(t) => {
+            if t.len() > MAX_CLIENT_MESSAGE_SIZE_BYTES {
+                return Err(WsError::MessageTooLarge);
+            }
+            t.to_string()
+        }
         Message::Close(_) => return Err(WsError::ConnectionClosed),
         _ => return Ok(()), // 忽略其他消息类型
     };
@@ -395,9 +392,21 @@ async fn handle_client_message(
             Ok(())
         }
         ClientMessage::Subscribe { node_ids } => {
+            if session
+                .subscribed_nodes
+                .len()
+                .saturating_add(node_ids.len())
+                > MAX_SUBSCRIPTIONS_PER_SESSION
+            {
+                return Err(WsError::TooManySubscriptions);
+            }
             // 公开操作，匿名用户也可以订阅节点
             tracing::debug!(
-                user = session.user.as_ref().map(|u| u.id.to_string()).unwrap_or_else(|| "anonymous".to_string()),
+                user = session
+                    .user
+                    .as_ref()
+                    .map(|u| u.id.to_string())
+                    .unwrap_or_else(|| "anonymous".to_string()),
                 node_count = node_ids.len(),
                 "User subscribed to nodes"
             );
@@ -406,7 +415,11 @@ async fn handle_client_message(
         }
         ClientMessage::Unsubscribe { node_ids } => {
             tracing::debug!(
-                user = session.user.as_ref().map(|u| u.id.to_string()).unwrap_or_else(|| "anonymous".to_string()),
+                user = session
+                    .user
+                    .as_ref()
+                    .map(|u| u.id.to_string())
+                    .unwrap_or_else(|| "anonymous".to_string()),
                 node_count = node_ids.len(),
                 "User unsubscribed from nodes"
             );
@@ -423,20 +436,10 @@ async fn handle_client_message(
             }
 
             // 验证 JWT
-            let jwt_secret = crate::utils::jwt_secret_from_env()
-                .map_err(|_| WsError::InvalidMessage)?;
-
-            match crate::utils::verify_jwt(&token, &jwt_secret) {
-                Ok(claims) => {
-                    // 解析用户信息
-                    let id = claims.sub.parse::<i64>().map_err(|_| WsError::InvalidMessage)?;
-                    let role = UserRole::from_str(&claims.role).ok_or(WsError::InvalidMessage)?;
-
-                    session.user = Some(AuthUser {
-                        id,
-                        username: claims.username.unwrap_or_else(|| format!("user_{}", id)),
-                        role,
-                    });
+            match authenticate_token(&token) {
+                Ok(user) => {
+                    let id = user.id;
+                    session.user = Some(user);
 
                     tracing::info!(user_id = id, "WebSocket upgraded to authenticated mode");
 
@@ -450,10 +453,8 @@ async fn handle_client_message(
                 }
                 Err(e) => {
                     // 认证失败
-                    tracing::warn!("WebSocket runtime auth failed: {:?}", e);
-                    let error_msg = ServerMessage::AuthFailed {
-                        message: format!("Invalid token: {}", e),
-                    };
+                    tracing::warn!("WebSocket runtime auth failed: {}", e);
+                    let error_msg = ServerMessage::AuthFailed { message: e };
                     if let Ok(json) = serde_json::to_string(&error_msg) {
                         let _ = sender.send(Message::Text(json.into())).await;
                     }
@@ -473,11 +474,67 @@ pub enum WsError {
     #[error("Invalid message format")]
     InvalidMessage,
 
+    #[error("Message too large")]
+    MessageTooLarge,
+
+    #[error("Too many subscriptions")]
+    TooManySubscriptions,
+
     #[error("Unauthorized")]
     Unauthorized,
 
     #[error("Permission denied")]
     PermissionDenied,
+}
+
+fn authenticate_from_headers(headers: &HeaderMap) -> Option<AuthUser> {
+    let bearer = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(ToOwned::to_owned);
+
+    let cookie_token = headers
+        .get(COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(extract_access_token_from_cookie);
+
+    bearer
+        .or(cookie_token)
+        .and_then(|token| authenticate_token(&token).ok())
+}
+
+fn extract_access_token_from_cookie(cookie_header: &str) -> Option<String> {
+    cookie_header.split(';').find_map(|part| {
+        let (name, value) = part.trim().split_once('=')?;
+        if name == ACCESS_TOKEN_COOKIE && !value.is_empty() {
+            Some(value.to_string())
+        } else {
+            None
+        }
+    })
+}
+
+fn authenticate_token(token: &str) -> Result<AuthUser, String> {
+    let jwt_secret = crate::utils::jwt_secret_from_env()
+        .map_err(|e| format!("Server authentication configuration error: {}", e))?;
+
+    let claims = crate::utils::verify_jwt(token, &jwt_secret)
+        .map_err(|e| format!("Invalid token: {}", e))?;
+
+    let id = claims
+        .sub
+        .parse::<i64>()
+        .map_err(|_| "Invalid user ID in token".to_string())?;
+
+    let role =
+        UserRole::from_str(&claims.role).ok_or_else(|| "Invalid role in token".to_string())?;
+
+    Ok(AuthUser {
+        id,
+        username: claims.username.unwrap_or_else(|| format!("user_{}", id)),
+        role,
+    })
 }
 
 #[cfg(test)]

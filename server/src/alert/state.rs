@@ -30,7 +30,12 @@ impl AlertStateStore {
     }
 
     /// 检查是否应该触发告警 (静默期检查)
-    pub async fn should_fire(&self, node_id: i64, rule_id: i64, silence_duration_secs: i64) -> bool {
+    pub async fn should_fire(
+        &self,
+        node_id: i64,
+        rule_id: i64,
+        silence_duration_secs: i64,
+    ) -> bool {
         let map = self.silence_map.read().await;
         let key = (node_id, rule_id);
 
@@ -63,9 +68,7 @@ impl AlertStateStore {
         let mut map = self.duration_map.write().await;
         let key = (node_id, rule_type.as_str().to_string());
 
-        let first_triggered = map
-            .entry(key)
-            .or_insert_with(Instant::now);
+        let first_triggered = map.entry(key).or_insert_with(Instant::now);
 
         first_triggered.elapsed().as_secs() as i64 >= duration_secs
     }
@@ -82,8 +85,16 @@ impl AlertStateStore {
         let mut map = self.silence_map.write().await;
         let now = Instant::now();
 
-        map.retain(|_, last_fired| {
-            now.duration_since(*last_fired).as_secs() < max_age_secs as u64
+        map.retain(|_, last_fired| now.duration_since(*last_fired).as_secs() < max_age_secs as u64);
+    }
+
+    /// 清理过期的持续状态，避免长期运行时状态无界增长
+    pub async fn cleanup_expired_duration(&self, max_age_secs: i64) {
+        let mut map = self.duration_map.write().await;
+        let now = Instant::now();
+
+        map.retain(|_, first_triggered| {
+            now.duration_since(*first_triggered).as_secs() < max_age_secs as u64
         });
     }
 
@@ -178,7 +189,9 @@ mod tests {
 
         store.mark_fired(1, 1).await;
         store.mark_fired(2, 1).await;
-        store.check_duration_exceeded(1, &AlertRuleType::CpuHigh, 1).await;
+        store
+            .check_duration_exceeded(1, &AlertRuleType::CpuHigh, 1)
+            .await;
 
         let stats = store.stats().await;
         assert_eq!(stats.silence_count, 2);

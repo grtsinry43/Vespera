@@ -2,10 +2,10 @@
 //!
 //! 负责定期清理过期的历史数据，保持数据库轻量
 
-use std::sync::Arc;
-use tokio::time::{interval, Duration};
 use crate::db::service_repo::ServiceRepository;
 use crate::state::AppState;
+use std::sync::Arc;
+use tokio::time::{interval, Duration};
 
 /// Metrics 数据保留时间（24小时）
 const METRICS_RETENTION_HOURS: i64 = 24;
@@ -15,6 +15,12 @@ const SERVICE_STATUS_RETENTION_HOURS: i64 = 30;
 
 /// 数据清理间隔（1小时）
 const CLEANUP_INTERVAL_HOURS: u64 = 1;
+
+/// 告警静默状态最长保留时间（48小时）
+const ALERT_SILENCE_RETENTION_HOURS: i64 = 48;
+
+/// 告警持续状态最长保留时间（6小时）
+const ALERT_DURATION_RETENTION_HOURS: i64 = 6;
 
 /// 启动数据清理后台任务
 ///
@@ -85,6 +91,16 @@ async fn cleanup_old_data(state: &AppState) -> Result<(), Box<dyn std::error::Er
         Err(e) => {
             tracing::error!("Failed to cleanup old service_status: {:?}", e);
         }
+    }
+
+    // 3. 清理内存中的告警状态
+    if let Some(alert_engine) = &state.alert_engine {
+        alert_engine
+            .cleanup_state(
+                ALERT_SILENCE_RETENTION_HOURS * 3600,
+                ALERT_DURATION_RETENTION_HOURS * 3600,
+            )
+            .await;
     }
 
     Ok(())

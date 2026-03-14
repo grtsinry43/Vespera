@@ -2,8 +2,8 @@
 //!
 //! 使用 utoipa 自动生成 OpenAPI 规范
 
-use utoipa::OpenApi;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::OpenApi;
 
 /// Vespera 监控系统 OpenAPI 文档
 #[derive(OpenApi)]

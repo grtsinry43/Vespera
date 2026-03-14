@@ -1,8 +1,9 @@
-use std::time::Instant;
-use std::sync::Arc;
+use crate::alert::AlertEngine;
 use crate::db::DbRepo;
 use crate::ws::Broadcaster;
-use crate::alert::AlertEngine;
+use std::sync::Arc;
+use std::time::Instant;
+use tokio::sync::Semaphore;
 
 /// 应用共享状态
 ///
@@ -19,6 +20,9 @@ pub struct AppState {
     /// WebSocket 广播器
     pub broadcaster: Broadcaster,
 
+    /// WebSocket 连接限制器
+    pub ws_connection_limiter: Arc<Semaphore>,
+
     /// 告警引擎 (可选)
     pub alert_engine: Option<Arc<AlertEngine>>,
 }
@@ -27,6 +31,7 @@ impl AppState {
     /// 创建新的应用状态
     pub fn new(db: DbRepo) -> Self {
         let broadcaster = Broadcaster::new();
+        let ws_connection_limiter = Arc::new(Semaphore::new(200));
 
         // 创建告警引擎
         let alert_engine = Some(Arc::new(AlertEngine::new(db.clone(), broadcaster.clone())));
@@ -35,6 +40,7 @@ impl AppState {
             start_time: Instant::now(),
             db,
             broadcaster,
+            ws_connection_limiter,
             alert_engine,
         }
     }

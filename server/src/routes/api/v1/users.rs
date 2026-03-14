@@ -1,21 +1,21 @@
 //! 用户管理 API (管理员专用)
 
-use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     Json,
 };
+use std::sync::Arc;
 use vespera_common::{
     CreateUserRequest, ResetPasswordRequest, Response as ApiResponse, ServerError,
     UpdateUserRequest, User,
 };
 
+use crate::state::AppState;
 use crate::{
     db::{DbRepo, UserRepoError},
     middleware::auth::AdminUser,
     utils::hash_password,
 };
-use crate::state::AppState;
 
 /// 列出所有用户
 ///
@@ -205,10 +205,10 @@ pub async fn delete_user(
         ));
     }
 
-    db.users()
-        .delete_user(user_id)
-        .await
-        .map_err(|e| ServerError::Internal(e.to_string()))?;
+    db.users().delete_user(user_id).await.map_err(|e| match e {
+        UserRepoError::UserNotFound => ServerError::NotFound("User not found".to_string()),
+        _ => ServerError::Internal(e.to_string()),
+    })?;
 
     Ok(Json(ApiResponse::success(())))
 }

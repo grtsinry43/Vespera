@@ -98,14 +98,14 @@ export interface RegisterRequest {
 // 登录响应
 export interface LoginResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string | null;
   user: User;
   expires_at: number;
 }
 
 // Refresh Token 请求
 export interface RefreshTokenRequest {
-  refresh_token: string;
+  refresh_token?: string;
 }
 
 // Refresh Token 响应

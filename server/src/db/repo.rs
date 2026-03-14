@@ -537,5 +537,4 @@ impl SqliteRepo {
     }
 
     // ========== AlertRule 操作 ==========
-
 }

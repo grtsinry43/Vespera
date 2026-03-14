@@ -66,7 +66,7 @@ pub struct RegisterRequest {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
     pub access_token: String,
-    pub refresh_token: String,
+    pub refresh_token: Option<String>,
     pub user: User,
     pub expires_at: i64,
 }
@@ -74,7 +74,8 @@ pub struct LoginResponse {
 /// Refresh Token 请求
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RefreshTokenRequest {
-    pub refresh_token: String,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
 }
 
 /// Refresh Token 响应
@@ -122,7 +123,10 @@ mod tests {
 
     #[test]
     fn test_user_role_serialization() {
-        assert_eq!(serde_json::to_string(&UserRole::Admin).unwrap(), "\"admin\"");
+        assert_eq!(
+            serde_json::to_string(&UserRole::Admin).unwrap(),
+            "\"admin\""
+        );
         assert_eq!(serde_json::to_string(&UserRole::User).unwrap(), "\"user\"");
     }
 

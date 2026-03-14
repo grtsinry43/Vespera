@@ -37,7 +37,9 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const token = authStorage.getAccessToken();
 
   const headers = new Headers(options?.headers);
-  headers.set('Content-Type', 'application/json');
+  if (options?.body !== undefined) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
@@ -45,6 +47,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
   const response = await fetch(url, {
     ...options,
+    credentials: 'same-origin',
     headers,
   });
 
@@ -133,7 +136,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
-      authStorage.setTokens(data.access_token, data.refresh_token);
+      authStorage.setTokens(data.access_token);
       return data;
     },
 
@@ -145,7 +148,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(req),
       });
-      authStorage.setTokens(data.access_token, data.refresh_token);
+      authStorage.setTokens(data.access_token);
       return data;
     },
 
@@ -153,16 +156,13 @@ export const api = {
      * 登出
      */
     logout: async (): Promise<void> => {
-      const refreshToken = authStorage.getRefreshToken();
-      if (refreshToken) {
-        try {
-          await request<void>(`${API_BASE}/auth/logout`, {
-            method: 'POST',
-            body: JSON.stringify({ refresh_token: refreshToken }),
-          });
-        } catch (e) {
-          console.error('Logout API failed:', e);
-        }
+      try {
+        await request<void>(`${API_BASE}/auth/logout`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+      } catch (e) {
+        console.error('Logout API failed:', e);
       }
       // 清除本地存储
       authStorage.clear();
@@ -189,19 +189,11 @@ export const api = {
      * 刷新 Token
      */
     refreshToken: async (): Promise<void> => {
-      const refreshToken = authStorage.getRefreshToken();
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
       const data = await request<{ access_token: string; refresh_token?: string; expires_at: number }>(`${API_BASE}/auth/refresh`, {
         method: 'POST',
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        body: JSON.stringify({}),
       });
-      if (data.refresh_token) {
-        authStorage.setTokens(data.access_token, data.refresh_token);
-      } else {
-        authStorage.setAccessToken(data.access_token);
-      }
+      authStorage.setAccessToken(data.access_token);
     },
   },
 

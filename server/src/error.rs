@@ -5,8 +5,8 @@ use axum::{
 };
 use thiserror::Error;
 
-use vespera_common;
 use crate::db::error::DbError;
+use vespera_common;
 
 /// 应用层错误类型
 #[derive(Error, Debug)]
@@ -19,6 +19,9 @@ pub enum AppError {
 
     #[error("Bad request: {0}")]
     BadRequest(String),
+
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
 
     #[error("Not found: {0}")]
     NotFound(String),
@@ -42,6 +45,10 @@ impl IntoResponse for AppError {
             AppError::BadRequest(msg) => {
                 tracing::warn!("Bad request: {}", msg);
                 (StatusCode::BAD_REQUEST, 400, msg.clone())
+            }
+            AppError::Forbidden(msg) => {
+                tracing::warn!("Forbidden: {}", msg);
+                (StatusCode::FORBIDDEN, 403, msg.clone())
             }
             AppError::NotFound(msg) => {
                 tracing::warn!("Not found: {}", msg);

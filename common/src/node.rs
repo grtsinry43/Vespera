@@ -131,9 +131,8 @@ mod tests {
 
     #[test]
     fn test_default_metrics_limit() {
-        let query: MetricsRangeQuery = serde_json::from_str(
-            r#"{"start": 1000, "end": 2000}"#
-        ).unwrap();
+        let query: MetricsRangeQuery =
+            serde_json::from_str(r#"{"start": 1000, "end": 2000}"#).unwrap();
         assert_eq!(query.limit, 100);
     }
 }

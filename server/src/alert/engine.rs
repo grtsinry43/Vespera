@@ -2,13 +2,11 @@
 //!
 //! 负责评估告警规则并触发通知
 
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
 use crate::alert::{models::*, state::AlertStateStore};
-use crate::db::{AlertRepository, DbRepo};
 use crate::db::models::{Metric, Node};
+use crate::db::{AlertRepository, DbRepo};
 use crate::ws::Broadcaster;
+use std::sync::Arc;
 
 /// 告警引擎
 pub struct AlertEngine {
@@ -24,6 +22,7 @@ impl AlertEngine {
             db,
             state_store: Arc::new(AlertStateStore::new()),
             webhook_client: reqwest::Client::builder()
+                .no_proxy()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
                 .expect("Failed to create HTTP client"),
@@ -38,7 +37,11 @@ impl AlertEngine {
         metrics: &Metric,
     ) -> Result<Vec<Alert>, AlertError> {
         // 获取适用于该节点的规则
-        let rules = self.db.alerts().get_rules_for_node(node.id).await
+        let rules = self
+            .db
+            .alerts()
+            .get_rules_for_node(node.id)
+            .await
             .map_err(|e| AlertError::DatabaseError(e.to_string()))?;
 
         let mut triggered_alerts = Vec::new();
@@ -46,13 +49,17 @@ impl AlertEngine {
         for rule in rules {
             if let Some(alert) = self.evaluate_rule(node, metrics, &rule).await? {
                 // 检查静默期
-                if self.state_store.should_fire(
-                    node.id,
-                    rule.id,
-                    rule.silence_duration_secs
-                ).await {
+                if self
+                    .state_store
+                    .should_fire(node.id, rule.id, rule.silence_duration_secs)
+                    .await
+                {
                     // 存储到数据库
-                    let alert_id = self.db.alerts().insert_alert(&alert).await
+                    let alert_id = self
+                        .db
+                        .alerts()
+                        .insert_alert(&alert)
+                        .await
                         .map_err(|e| AlertError::DatabaseError(e.to_string()))?;
 
                     let mut alert_with_id = alert.clone();
@@ -85,13 +92,16 @@ impl AlertEngine {
         rule: &AlertRule,
     ) -> Result<Option<Alert>, AlertError> {
         match &rule.config {
-            AlertRuleConfig::CpuHigh { threshold_percent, duration_secs } => {
+            AlertRuleConfig::CpuHigh {
+                threshold_percent,
+                duration_secs,
+            } => {
                 if metrics.cpu_usage > (*threshold_percent as f64) {
-                    if self.state_store.check_duration_exceeded(
-                        node.id,
-                        &rule.rule_type,
-                        *duration_secs
-                    ).await {
+                    if self
+                        .state_store
+                        .check_duration_exceeded(node.id, &rule.rule_type, *duration_secs)
+                        .await
+                    {
                         return Ok(Some(Alert {
                             id: None,
                             rule_id: rule.id,
@@ -113,16 +123,21 @@ impl AlertEngine {
                         }));
                     }
                 } else {
-                    self.state_store.clear_duration_state(node.id, &rule.rule_type).await;
+                    self.state_store
+                        .clear_duration_state(node.id, &rule.rule_type)
+                        .await;
                 }
             }
-            AlertRuleConfig::MemoryHigh { threshold_percent, duration_secs } => {
+            AlertRuleConfig::MemoryHigh {
+                threshold_percent,
+                duration_secs,
+            } => {
                 if metrics.memory_usage > (*threshold_percent as f64) {
-                    if self.state_store.check_duration_exceeded(
-                        node.id,
-                        &rule.rule_type,
-                        *duration_secs
-                    ).await {
+                    if self
+                        .state_store
+                        .check_duration_exceeded(node.id, &rule.rule_type, *duration_secs)
+                        .await
+                    {
                         return Ok(Some(Alert {
                             id: None,
                             rule_id: rule.id,
@@ -144,10 +159,15 @@ impl AlertEngine {
                         }));
                     }
                 } else {
-                    self.state_store.clear_duration_state(node.id, &rule.rule_type).await;
+                    self.state_store
+                        .clear_duration_state(node.id, &rule.rule_type)
+                        .await;
                 }
             }
-            AlertRuleConfig::DiskFull { threshold_percent, mount_point } => {
+            AlertRuleConfig::DiskFull {
+                threshold_percent,
+                mount_point,
+            } => {
                 for disk in &metrics.disk_info {
                     if let Some(mp) = mount_point {
                         if &disk.mount != mp {
@@ -191,15 +211,19 @@ impl AlertEngine {
     async fn send_notifications(&self, alert: &Alert, rule: &AlertRule) {
         for channel in &rule.notification_channels {
             match channel {
-                NotificationChannel::Webhook { url, headers, template } => {
+                NotificationChannel::Webhook {
+                    url,
+                    headers,
+                    template,
+                } => {
                     if let Err(e) = self.send_webhook(alert, url, headers, template).await {
                         tracing::error!("Failed to send webhook: {}", e);
                     }
                 }
                 NotificationChannel::WebSocket => {
-                    let _ = self.broadcaster.broadcast(
-                        vespera_common::ServerMessage::Alert(alert.to_ws_message())
-                    );
+                    let _ = self
+                        .broadcaster
+                        .broadcast(vespera_common::ServerMessage::Alert(alert.to_ws_message()));
                 }
                 NotificationChannel::Email { .. } => {
                     // TODO: Email 实现
@@ -228,10 +252,22 @@ impl AlertEngine {
             }
         }
 
-        request.send().await
+        request
+            .send()
+            .await
             .map_err(|e| AlertError::WebhookError(e.to_string()))?;
 
         Ok(())
+    }
+
+    /// 清理内存中的告警状态，防止状态表长期膨胀
+    pub async fn cleanup_state(&self, max_silence_age_secs: i64, max_duration_age_secs: i64) {
+        self.state_store
+            .cleanup_expired_silence(max_silence_age_secs)
+            .await;
+        self.state_store
+            .cleanup_expired_duration(max_duration_age_secs)
+            .await;
     }
 }
 

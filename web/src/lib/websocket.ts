@@ -6,7 +6,7 @@ export type MessageHandler = (message: ServerMessage) => void;
 
 export class WebSocketManager {
   private ws: WebSocket | null = null;
-  private token: string;
+  private token: string | null;
   private url: string;
   private handlers: Set<MessageHandler> = new Set();
   private reconnectTimer: number | null = null;
@@ -16,7 +16,7 @@ export class WebSocketManager {
   private authenticated = false;
   private subscribedNodes: Set<number> = new Set();
 
-  constructor(token: string, url = '/api/v1/ws') {
+  constructor(token?: string | null, url = '/api/v1/ws') {
     this.token = token;
 
     // 在开发环境使用相对路径（走 Vite 代理），生产环境构造完整 URL
@@ -38,6 +38,14 @@ export class WebSocketManager {
   connect(): Promise<void> {
     wsStore.setConnecting();
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const settle = (callback: () => void) => {
+        if (!settled) {
+          settled = true;
+          callback();
+        }
+      };
+
       try {
         this.ws = new WebSocket(this.url);
 
@@ -46,17 +54,24 @@ export class WebSocketManager {
           this.reconnectAttempts = 0;
           wsStore.setConnected(false);
 
-          // 发送认证消息
+          const token = authStorage.getAccessToken() ?? this.token;
+          if (!token) {
+            this.authenticated = false;
+            wsStore.setAuthenticated(false);
+            settle(resolve);
+            return;
+          }
+
           this.send({
             type: 'auth',
-            token: authStorage.getAccessToken() ?? this.token,
+            token,
           });
 
           // 等待认证结果（但即使失败也继续，因为后端支持匿名访问）
           const authTimeout = setTimeout(() => {
             this.removeHandler(handleAuth);
             console.log('[WS] Auth timeout, continuing in anonymous mode');
-            resolve(); // 超时也算成功，继续以匿名模式运行
+            settle(resolve); // 超时也算成功，继续以匿名模式运行
           }, 5000);
 
           const handleAuth = (message: ServerMessage) => {
@@ -70,14 +85,17 @@ export class WebSocketManager {
               if (this.subscribedNodes.size > 0) {
                 this.subscribe(Array.from(this.subscribedNodes));
               }
-              resolve();
+              settle(resolve);
             } else if (message.type === 'auth_failed') {
               this.removeHandler(handleAuth);
               console.warn('[WS] Auth failed, continuing in anonymous mode');
               // 认证失败但继续连接（匿名模式）
               this.authenticated = false;
               wsStore.setAuthenticated(false);
-              resolve(); // 不要 reject，继续使用匿名模式
+              if (this.subscribedNodes.size > 0) {
+                this.subscribe(Array.from(this.subscribedNodes));
+              }
+              settle(resolve); // 不要 reject，继续使用匿名模式
             }
           };
 
@@ -110,10 +128,11 @@ export class WebSocketManager {
           console.log('[WS] Disconnected');
           this.authenticated = false;
           wsStore.setDisconnected();
+          settle(() => reject(new Error('WebSocket connection closed')));
           this.attemptReconnect();
         };
       } catch (err) {
-        reject(err);
+        settle(() => reject(err));
       }
     });
   }
@@ -152,7 +171,7 @@ export class WebSocketManager {
   subscribe(nodeIds: number[]) {
     nodeIds.forEach((id) => this.subscribedNodes.add(id));
 
-    if (this.authenticated) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
       this.send({
         type: 'subscribe',
         node_ids: nodeIds,
@@ -166,7 +185,7 @@ export class WebSocketManager {
   unsubscribe(nodeIds: number[]) {
     nodeIds.forEach((id) => this.subscribedNodes.delete(id));
 
-    if (this.authenticated) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
       this.send({
         type: 'unsubscribe',
         node_ids: nodeIds,

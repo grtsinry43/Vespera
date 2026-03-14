@@ -2,8 +2,8 @@ use axum::{extract::State, response::Json};
 use serde::Serialize;
 use std::sync::Arc;
 
-use vespera_common::Response;
 use crate::state::AppState;
+use vespera_common::Response;
 
 /// 健康检查响应数据
 #[derive(Serialize)]

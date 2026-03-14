@@ -23,18 +23,15 @@ function createAuthStore() {
 
     // 初始化：检查登录状态
     async init() {
-      const token = authStorage.getAccessToken();
-      if (!token) {
-        set({ user: null, loading: false, error: null });
-        return;
-      }
-
       update((state) => ({ ...state, loading: true }));
 
       try {
+        if (!authStorage.getAccessToken()) {
+          await api.auth.refreshToken();
+        }
         const user = await api.auth.me();
         set({ user, loading: false, error: null });
-      } catch (error: any) {
+      } catch (_error: any) {
         // Token 可能已过期，尝试刷新
         try {
           await api.auth.refreshToken();
